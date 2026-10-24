@@ -9,7 +9,6 @@ import net.neoforged.neoform.runtime.actions.InjectFromZipFileSource;
 import net.neoforged.neoform.runtime.actions.InjectZipContentAction;
 import net.neoforged.neoform.runtime.actions.MergeWithSourcesAction;
 import net.neoforged.neoform.runtime.actions.NormalizeLegacyMcpPatchesAction;
-import net.neoforged.neoform.runtime.actions.RemapSrgClassesAction;
 import net.neoforged.neoform.runtime.actions.PatchActionFactory;
 import net.neoforged.neoform.runtime.actions.RecompileSourcesAction;
 import net.neoforged.neoform.runtime.actions.StripManifestDigestContentFilter;
@@ -471,28 +470,13 @@ public class RunNeoFormCommand extends NeoFormEngineCommand {
                 neoforgeConfig.universalFilters());
 
         if (shape.classesComeFromRemapNode()) {
-            var namingScheme = engine.getProcessGeneration().namingScheme();
-            if (namingScheme == ProcessGeneration.NamingScheme.INTERMEDIARY) {
-                // Minecraft and NeoForge classes need to be remapped,
-                // so we only expose jars that contains both (similar to the standard decomp/recomp pipeline)
-                var remapper = graph.getRequiredNode(NeoFormEngine.CLASSES_TO_NAMED);
-                remapper.setInput("input", binaryWithNeoForgeOutput.asInput());
-                var remappedOutput = remapper.getRequiredOutput("output");
-                graph.setResult(ResultIds.GAME_JAR_NO_RECOMP, remappedOutput); // technically redundant, but set again for clarity
-                graph.setResult(ResultIds.GAME_JAR_NO_RECOMP_WITH_NEOFORGE, remappedOutput);
-
-            } else {
-                // Legacy MCP: classes are remapped to MCP names here (the sources are decompiled with
-                // SRG names because the MCP patches require them).
-                var builder = graph.nodeBuilder(NeoFormEngine.CLASSES_TO_NAMED);
-                builder.input("input", binaryWithNeoForgeOutput.asInput());
-                builder.input("mappings", graph.getResult(ResultIds.INTERMEDIARY_TO_NAMED_MAPPING_TSRG2).asInput());
-                var remappedOutput = builder.output("output", NodeOutputType.JAR, "Classes with SRG method and field names remapped to MCP.");
-                builder.action(new RemapSrgClassesAction());
-                builder.build();
-                graph.setResult(ResultIds.GAME_JAR_NO_RECOMP, remappedOutput);
-                graph.setResult(ResultIds.GAME_JAR_NO_RECOMP_WITH_NEOFORGE, remappedOutput);
-            }
+            // Minecraft and NeoForge classes need to be remapped,
+            // so we only expose jars that contains both (similar to the standard decomp/recomp pipeline)
+            var remapper = graph.getRequiredNode(NeoFormEngine.CLASSES_TO_NAMED);
+            remapper.setInput("input", binaryWithNeoForgeOutput.asInput());
+            var remappedOutput = remapper.getRequiredOutput("output");
+            graph.setResult(ResultIds.GAME_JAR_NO_RECOMP, remappedOutput); // technically redundant, but set again for clarity
+            graph.setResult(ResultIds.GAME_JAR_NO_RECOMP_WITH_NEOFORGE, remappedOutput);
         } else {
             graph.setResult(ResultIds.GAME_JAR_NO_RECOMP, binaryPatchOutput);
             graph.setResult(ResultIds.GAME_JAR_NO_RECOMP_WITH_NEOFORGE, binaryWithNeoForgeOutput);

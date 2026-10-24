@@ -246,7 +246,7 @@ public class NeoFormEngine implements AutoCloseable {
         } else if (namingScheme == ProcessGeneration.NamingScheme.MCP) {
             // Legacy MCP: classes are remapped to MCP names on the bytecode level *before* decompilation,
             // so that decompiled sources directly carry MCP names; only javadocs remain for the sources.
-            addMcpBytecodeRemap();
+            addMcpBytecodeRemap(decompileInput);
         } else {
             // Without the presence of further patching or renaming, the game jar without recompilation is the deobfuscated vanilla jar
             graph.setResultFromCurrentInput(ResultIds.GAME_JAR_NO_RECOMP, decompileInput);
@@ -261,8 +261,7 @@ public class NeoFormEngine implements AutoCloseable {
 
     /**
      * Role-based node id for the node that remaps the class jar from SRG/intermediary names to
-     * user-facing names. Present on the INTERMEDIARY and MCP (1.13-1.16.5) paths; on the 1.12.2
-     * path this node is created by the CLI after the NeoForge merge instead.
+     * user-facing names. Present on the INTERMEDIARY and MCP paths.
      */
     public static final String CLASSES_TO_NAMED = "remapClassesToNamed";
 
@@ -356,13 +355,14 @@ public class NeoFormEngine implements AutoCloseable {
 
     /**
      * Legacy MCP (1.12.2): the MCP patches are written against SRG-named sources, so sources must be
-     * decompiled from SRG-named classes and only receive javadoc/parameter data after patching. The
-     * bytecode-level SRG to MCP remapping is performed separately on the game jar and on the
-     * NeoForge-combined jar (see {@code applyNeoForgeBinaryPatchProcessTransforms}).
+     * decompiled from SRG-named classes and only receive javadoc/parameter data after patching.
+     * The bytecode-level SRG to MCP remapping is performed on the decompile input; when running a
+     * userdev pipeline the CLI repoints this node at the NeoForge-combined jar instead.
      */
-    private void addMcpBytecodeRemap() {
+    private void addMcpBytecodeRemap(NodeInput decompileInput) {
         var mcpMappingOutputs = createMcpMappingNodes();
         var srgToMcp = mcpMappingOutputs.srgToMcp();
+        var srgToMcpTsrg2 = mcpMappingOutputs.srgToMcpTsrg2();
         var csvMappings = mcpMappingOutputs.csvMappings();
 
         // The sources keep SRG names through patching; afterwards apply parameter names and javadocs
@@ -396,6 +396,15 @@ public class NeoFormEngine implements AutoCloseable {
                         }
                 )
         ));
+
+        var builder = graph.nodeBuilder(CLASSES_TO_NAMED);
+        builder.input("input", decompileInput.copy());
+        builder.input("mappings", srgToMcpTsrg2.asInput());
+        var mcpOutput = builder.output("output", NodeOutputType.JAR, "Classes with SRG method and field names remapped to MCP.");
+        builder.action(new RemapSrgClassesAction());
+        builder.build();
+
+        graph.setResult(ResultIds.GAME_JAR_NO_RECOMP, mcpOutput);
     }
 
     private record McpMappingOutputs(NodeOutput srgToMcp,
@@ -406,8 +415,7 @@ public class NeoFormEngine implements AutoCloseable {
     /**
      * Builds the {@code createMcpMappings} node plus the mapping results shared by all legacy MCP
      * paths. The source/class remap node ids are the fixed role ids {@link #SOURCES_TO_NAMED} and
-     * {@link #CLASSES_TO_NAMED}; 1.12.2 does not build the class-side node here (the CLI creates it
-     * after the NeoForge merge).
+     * {@link #CLASSES_TO_NAMED}.
      */
     private McpMappingOutputs createMcpMappingNodes() {
         if (legacyMcpMappingsPath == null) {

@@ -136,8 +136,10 @@ public class NeoFormGraphTest {
         // 1.12.2 MCP patches are written against SRG names, so sources keep SRG names until
         // applyMcpCsvData (javadoc/params) and remapSourcesToNamed (names) after patching.
         assertNodeChain(graph, "rename", "mcinject", "decompile", "inject", "patch", "applyMcpCsvData", "remapSourcesToNamed");
-        // The classes remap to MCP happens on the NeoForge-combined jar instead
+        // The class remap to MCP happens on the bytecode level; with a userdev pipeline the CLI
+        // repoints this node at the NeoForge-combined jar.
         assertResultFromNode(graph, "mcinject", "output", ResultIds.VANILLA_DEOBFUSCATED);
+        assertResultFromNode(graph, "remapClassesToNamed", "output", ResultIds.GAME_JAR_NO_RECOMP);
     }
 
     @Test
