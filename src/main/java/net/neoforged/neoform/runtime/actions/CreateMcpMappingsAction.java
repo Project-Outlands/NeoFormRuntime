@@ -48,15 +48,17 @@ public class CreateMcpMappingsAction extends BuiltInAction {
                         csvMappings.methodName(srgName)
                 );
                 // Attach MCP parameter names (TSRG2 only) so that bytecode remappers can rename LVT
-                // entries, which in turn lets the decompiler emit named method parameters.
-                var paramSlot = 0;
-                for (var argumentSize : argumentSlots(mappedMethod.getMappedDescriptor())) {
-                    var paramSrgName = csvMappings.parameterSrgName(srgName, paramSlot);
-                    var paramName = csvMappings.parameterName(srgName, paramSlot);
-                    if (paramSrgName != null && paramName != null) {
-                        methodBuilder.parameter(paramSlot, paramSrgName, paramName);
+                // entries, which in turn lets the decompiler emit named method parameters. The CSV
+                // keys carry the LVT slot (instance methods start at slot 1 since slot 0 holds
+                // 'this'), while remappers expect the 0-based parameter ordinal; derive the ordinal
+                // from the slot order, but only when the CSV slots exactly match the slot layout
+                // implied by the descriptor.
+                var params = csvMappings.parametersFor(srgName);
+                if (slotsMatchDescriptor(params, mappedMethod.getMappedDescriptor())) {
+                    for (int i = 0; i < params.size(); i++) {
+                        var param = params.get(i);
+                        methodBuilder.parameter(i, param.srgName(), param.name());
                     }
-                    paramSlot += argumentSize;
                 }
             }
         }
@@ -73,11 +75,43 @@ public class CreateMcpMappingsAction extends BuiltInAction {
     }
 
     /**
+     * Checks that the LVT slots of the given parameters exactly match the slot layout implied by
+     * the method descriptor, either as a static method or as an instance method (where slot 0 is
+     * occupied by {@code this}). Parameter ordinals can only be assigned safely from complete data.
+     */
+    static boolean slotsMatchDescriptor(List<McpCsvMappings.ParamMapping> params, String descriptor) {
+        var sizes = argumentSlotSizes(descriptor);
+        return slotsMatch(params, slotStarts(sizes, 0)) || slotsMatch(params, slotStarts(sizes, 1));
+    }
+
+    private static boolean slotsMatch(List<McpCsvMappings.ParamMapping> params, List<Integer> slotStarts) {
+        if (params.size() != slotStarts.size()) {
+            return false;
+        }
+        for (int i = 0; i < params.size(); i++) {
+            if (params.get(i).slot() != slotStarts.get(i)) {
+                return false;
+            }
+        }
+        return true;
+    }
+
+    private static List<Integer> slotStarts(List<Integer> slotSizes, int base) {
+        var result = new ArrayList<Integer>(slotSizes.size());
+        var slot = base;
+        for (var size : slotSizes) {
+            result.add(slot);
+            slot += size;
+        }
+        return result;
+    }
+
+    /**
      * Returns the LVT slot sizes of the arguments of a method descriptor, e.g. {@code (JD)V -> [2, 2]}.
      * Arrays and object types occupy one slot; {@code long} and {@code double} occupy two.
      * Avoids a dependency on ASM just for parsing descriptors.
      */
-    static List<Integer> argumentSlots(String descriptor) {
+    static List<Integer> argumentSlotSizes(String descriptor) {
         var result = new ArrayList<Integer>();
         var i = descriptor.indexOf('(') + 1;
         while (descriptor.charAt(i) != ')') {

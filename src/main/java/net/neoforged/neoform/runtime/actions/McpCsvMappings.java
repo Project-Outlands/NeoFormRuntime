@@ -1,13 +1,12 @@
 package net.neoforged.neoform.runtime.actions;
 
-import org.jetbrains.annotations.Nullable;
-
 import java.io.BufferedReader;
 import java.io.IOException;
 import java.io.InputStreamReader;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Path;
 import java.util.ArrayList;
+import java.util.Comparator;
 import java.util.HashMap;
 import java.util.List;
 import java.util.Map;
@@ -17,46 +16,59 @@ import java.util.zip.ZipFile;
 /**
  * Legacy MCP mapping zips contain CSV files that map SRG member names to MCP member names.
  */
-public record McpCsvMappings(Map<String, MemberMapping> methods, Map<String, MemberMapping> fields, Map<String, String> params) {
+public record McpCsvMappings(Map<String, MemberMapping> methods, Map<String, MemberMapping> fields, Map<String, String> params,
+                             Map<String, List<ParamMapping>> paramsByMethodId) {
     public record MemberMapping(String name, String description) {
     }
 
     /**
-     * Returns the legacy MCP placeholder name of the parameter with the given local variable table slot
-     * of the given method, or {@code null} if the method has no CSV mapping. Legacy MCP parameter names
-     * are keyed by the numeric method id (e.g. {@code p_1234_0_} is slot 0 of {@code func_1234_*}).
+     * A legacy MCP parameter mapping: the local variable table slot, the CSV key
+     * (e.g. {@code p_1234_1_}) and the MCP name.
      */
-    @Nullable
-    public String parameterSrgName(String methodSrgName, int slot) {
-        if (!methods.containsKey(methodSrgName)) {
-            return null;
-        }
-        // The SRG name is func_<id>_<suffix>; the parameter id references <id>
-        var matcher = SRG_METHOD_ID.matcher(methodSrgName);
-        if (!matcher.matches()) {
-            return null;
-        }
-        return "p_" + matcher.group(1) + "_" + slot + "_";
+    public record ParamMapping(int slot, String srgName, String name) {
     }
 
     /**
-     * Returns the MCP name of the parameter with the given local variable table slot of the given method,
-     * or {@code null} if no mapping exists.
+     * Returns the parameter mappings of the given method. Legacy MCP parameter names are keyed by
+     * the numeric method id and the local variable table slot (e.g. {@code p_1234_1_} is slot 1 of
+     * {@code func_1234_*}); since slot 0 holds {@code this} for instance methods, the first
+     * parameter of an instance method is at slot 1.
      */
-    @Nullable
-    public String parameterName(String methodSrgName, int slot) {
-        var srgName = parameterSrgName(methodSrgName, slot);
-        return srgName != null ? params.get(srgName) : null;
+    public List<ParamMapping> parametersFor(String methodSrgName) {
+        var matcher = SRG_METHOD_ID.matcher(methodSrgName);
+        if (!matcher.matches()) {
+            return List.of();
+        }
+        return paramsByMethodId.getOrDefault(matcher.group(1), List.of());
     }
 
     private static final Pattern SRG_METHOD_ID = Pattern.compile("func_(\\d+)_[a-zA-Z_]+");
+    private static final Pattern PARAM_KEY = Pattern.compile("p_i?(\\d+)_(\\d+)_");
+
+    private static Map<String, List<ParamMapping>> indexParams(Map<String, String> params) {
+        var result = new HashMap<String, List<ParamMapping>>();
+        for (var entry : params.entrySet()) {
+            var matcher = PARAM_KEY.matcher(entry.getKey());
+            if (matcher.matches()) {
+                result.computeIfAbsent(matcher.group(1), ignored -> new ArrayList<>())
+                        .add(new ParamMapping(Integer.parseInt(matcher.group(2)), entry.getKey(), entry.getValue()));
+            }
+        }
+        result.replaceAll((methodId, list) -> {
+            list.sort(Comparator.comparingInt(ParamMapping::slot));
+            return List.copyOf(list);
+        });
+        return Map.copyOf(result);
+    }
 
     public static McpCsvMappings load(Path zipPath) throws IOException {
         try (var zip = new ZipFile(zipPath.toFile())) {
+            var params = readParamMappings(zip, "params.csv");
             return new McpCsvMappings(
                     readMemberMappings(zip, "methods.csv"),
                     readMemberMappings(zip, "fields.csv"),
-                    readParamMappings(zip, "params.csv")
+                    params,
+                    indexParams(params)
             );
         }
     }
