@@ -6,6 +6,9 @@ import org.jetbrains.annotations.Nullable;
 /**
  * Substitutes tools referenced by legacy MCP configs (1.12.2 era) with versions that work
  * on modern JDKs.
+ * <p>
+ * The substitution is global: it applies wherever a matching function id and tool artifact pair
+ * is encountered, not only to a specific pipeline.
  */
 public final class LegacyMcpToolOverrides {
     /**

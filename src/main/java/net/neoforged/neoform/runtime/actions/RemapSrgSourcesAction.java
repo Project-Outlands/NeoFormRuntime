@@ -17,8 +17,9 @@ import java.util.zip.ZipOutputStream;
 
 /**
  * Takes a zip-file of Java sources and replaces SRG identifiers with
- * identifiers from a mapping file. Presumes there are "merged mappings"
- * available already.
+ * identifiers from a mapping file. The mappings are either given directly via the
+ * {@code mappings} input, or derived from the {@code mergedMappings} and {@code officialMappings}
+ * inputs on the intermediary pipeline.
  */
 public class RemapSrgSourcesAction implements ExecutionNodeAction {
     private static final Pattern SRG_FINDER = Pattern.compile("[fF]unc_\\d+_[a-zA-Z_]+|m_\\d+_|[fF]ield_\\d+_[a-zA-Z_]+|f_\\d+_");
@@ -41,14 +42,14 @@ public class RemapSrgSourcesAction implements ExecutionNodeAction {
 
     @Override
     public void run(ProcessingEnvironment environment) throws IOException, InterruptedException {
-        var srgToOfficial = buildSrgToNamedMappings(environment);
-        var srgNamesToOfficial = new HashMap<String, String>();
-        for (var mappedClass : srgToOfficial.getClasses()) {
+        var srgToNamed = buildSrgToNamedMappings(environment);
+        var srgNamesToNamed = new HashMap<String, String>();
+        for (var mappedClass : srgToNamed.getClasses()) {
             for (var mappedField : mappedClass.getFields()) {
-                srgNamesToOfficial.put(mappedField.getOriginal(), mappedField.getMapped());
+                srgNamesToNamed.put(mappedField.getOriginal(), mappedField.getMapped());
             }
             for (var mappedMethod : mappedClass.getMethods()) {
-                srgNamesToOfficial.put(mappedMethod.getOriginal(), mappedMethod.getMapped());
+                srgNamesToNamed.put(mappedMethod.getOriginal(), mappedMethod.getMapped());
             }
         }
 
@@ -62,7 +63,7 @@ public class RemapSrgSourcesAction implements ExecutionNodeAction {
 
                 if (entry.getName().endsWith(".java")) {
                     var sourceCode = new String(zipIn.readAllBytes(), StandardCharsets.UTF_8);
-                    var mappedSource = mapSourceCode(sourceCode, srgNamesToOfficial);
+                    var mappedSource = mapSourceCode(sourceCode, srgNamesToNamed);
                     zipOut.write(mappedSource.getBytes(StandardCharsets.UTF_8));
                 } else {
                     zipIn.transferTo(zipOut);
@@ -72,12 +73,12 @@ public class RemapSrgSourcesAction implements ExecutionNodeAction {
         }
     }
 
-    private static String mapSourceCode(String sourceCode, HashMap<String, String> srgNamesToOfficial) {
+    private static String mapSourceCode(String sourceCode, HashMap<String, String> srgNamesToNamed) {
         var m = SRG_FINDER.matcher(sourceCode);
         return m.replaceAll(matchResult -> {
             var matched = matchResult.group();
             // Some will be unmapped
-            var mapped = srgNamesToOfficial.getOrDefault(matched, matched);
+            var mapped = srgNamesToNamed.getOrDefault(matched, matched);
             return Matcher.quoteReplacement(mapped);
         });
     }

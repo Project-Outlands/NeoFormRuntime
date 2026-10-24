@@ -216,10 +216,10 @@ public class RunNeoFormCommand extends NeoFormEngineCommand {
             return new PipelineShape(
                     namingScheme == ProcessGeneration.NamingScheme.INTERMEDIARY,
                     namingScheme != ProcessGeneration.NamingScheme.OFFICIAL,
-                    generation.usesBundledMcpDefaults() && hasSourceProcessor,
+                    generation.defersUserdevSourceInjection() && hasSourceProcessor,
                     namingScheme == ProcessGeneration.NamingScheme.INTERMEDIARY,
                     namingScheme != ProcessGeneration.NamingScheme.OFFICIAL,
-                    generation.usesBundledMcpDefaults());
+                    generation.requiresLegacyPatchNormalization());
         }
     }
 

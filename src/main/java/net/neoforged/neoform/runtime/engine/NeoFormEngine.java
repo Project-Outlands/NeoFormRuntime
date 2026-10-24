@@ -39,7 +39,6 @@ import net.neoforged.neoform.runtime.graph.NodeOutput;
 import net.neoforged.neoform.runtime.graph.NodeOutputType;
 import net.neoforged.neoform.runtime.graph.ResultRepresentation;
 import net.neoforged.neoform.runtime.graph.transforms.GraphTransform;
-import net.neoforged.neoform.runtime.graph.transforms.ReplaceNodeInput;
 import net.neoforged.neoform.runtime.graph.transforms.ReplaceNodeOutput;
 import net.neoforged.neoform.runtime.utils.AnsiColor;
 import net.neoforged.neoform.runtime.utils.JavaInstallationInformation;
@@ -52,7 +51,6 @@ import org.jetbrains.annotations.Nullable;
 
 import java.io.IOException;
 import java.io.PrintWriter;
-import java.net.URI;
 import java.nio.file.Files;
 import java.nio.file.Path;
 import java.util.ArrayList;
@@ -567,7 +565,7 @@ public class NeoFormEngine implements AutoCloseable {
             }
             case "patch" -> {
                 var patches = getRequiredDataSource("patches");
-                if (processGeneration.usesBundledMcpDefaults()) {
+                if (processGeneration.requiresLegacyPatchNormalization()) {
                     var normalize = graph.nodeBuilder("normalizeLegacyMcpPatches");
                     var normalizedPatches = normalize.output("output", NodeOutputType.ZIP,
                             "Legacy MCP patches with unified diff context lines normalized");

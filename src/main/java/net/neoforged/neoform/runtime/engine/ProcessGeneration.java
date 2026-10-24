@@ -176,10 +176,18 @@ public class ProcessGeneration {
     }
 
     /**
-     * Whether this version ships a built-in default MCP mapping (currently only 1.12.2), as opposed
-     * to legacy versions that require the user to supply the MCP CSV mappings via --mcp-mappings.
+     * Whether patches of this generation (1.12.2 era MCP/userdev patches) use a legacy unified diff
+     * format whose hunk context must be normalized before DiffPatch can apply them.
      */
-    public boolean usesBundledMcpDefaults() {
+    public boolean requiresLegacyPatchNormalization() {
+        return defaultLegacyMcpMappings != null;
+    }
+
+    /**
+     * Whether this generation (1.12.2 era) requires userdev sources to be injected into the patched
+     * Minecraft sources late in the pipeline, rather than being remapped together with them.
+     */
+    public boolean defersUserdevSourceInjection() {
         return defaultLegacyMcpMappings != null;
     }
 
