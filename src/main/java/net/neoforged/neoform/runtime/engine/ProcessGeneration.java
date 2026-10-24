@@ -46,6 +46,18 @@ public class ProcessGeneration {
     private static final MinecraftReleaseVersion MC_1_21_6 = new MinecraftReleaseVersion(1, 21, 6);
 
     /**
+     * The naming scheme of the Minecraft sources/classes that MCP/NeoForm produces for a version.
+     */
+    public enum NamingScheme {
+        /** No intermediary layer: sources/classes already use user-facing names. */
+        OFFICIAL,
+        /** SRG intermediary + Mojang ProGuard mappings (1.17-1.20.1). */
+        INTERMEDIARY,
+        /** SRG intermediary + MCP CSV mappings (1.12.2 and 1.13-1.16.5). */
+        MCP
+    }
+
+    /**
      * Indicates whether the Minecraft server jar file contains third party
      * dependencies directly in its root directory, which need to be ignored.
      */
@@ -57,7 +69,7 @@ public class ProcessGeneration {
      * In those versions, to produce usable sources, we need to apply an additional
      * remapping step later. (Either to Mojang mappings, or to MCP).
      */
-    private boolean sourcesUseIntermediaryNames;
+    private NamingScheme namingScheme = NamingScheme.OFFICIAL;
 
     /**
      * SAS was used in Forge 1.20.1 and earlier to remove the "OnlyIn" annotation from client-only classes
@@ -70,6 +82,9 @@ public class ProcessGeneration {
      * indicates which distribution each file came from. Only applies to joined distributions.
      */
     private boolean generateDistSourceManifest;
+
+    @Nullable
+    private String defaultLegacyMcpMappings;
 
     /**
      * For (Neo)Forge 1.20.1 and below, we have to remap method and field names from
@@ -99,12 +114,18 @@ public class ProcessGeneration {
         }
 
         // In 1.20.2 and later, NeoForge switched to Mojmap at runtime and sources defined in Mojmap
-        result.sourcesUseIntermediaryNames = isLessThanOrEqualTo(releaseVersion, MC_1_20_1);
+        if (isLessThanOrEqualTo(releaseVersion, MC_1_20_1)) {
+            result.namingScheme = "1.12.2".equals(minecraftVersion) ? NamingScheme.MCP : NamingScheme.INTERMEDIARY;
+        }
 
         // In 1.21.6 and later, manifest entries should be generated as they may be used instead of RuntimeDistCleaner
         result.generateDistSourceManifest = isGreaterThanOrEqualTo(releaseVersion, MC_1_21_6);
 
         result.supportsSideAnnotationStripping = isLessThanOrEqualTo(releaseVersion, MC_1_20_1);
+
+        if ("1.12.2".equals(minecraftVersion)) {
+            result.defaultLegacyMcpMappings = "de.oceanlabs.mcp:mcp_stable:39-1.12@zip";
+        }
 
         return result;
     }
@@ -124,10 +145,14 @@ public class ProcessGeneration {
     }
 
     /**
-     * Does the Minecraft source code that MCP/NeoForm creates use SRG names?
+     * The naming scheme of the sources/classes produced by MCP/NeoForm for this Minecraft version.
+     * <p>
+     * Note that {@link NamingScheme#MCP} covers two different engine pipelines (1.12.2 and
+     * 1.13-1.16.5); the engine distinguishes them by whether the config contains
+     * {@code mergeMappings}/{@code downloadClientMappings} nodes.
      */
-    public boolean sourcesUseIntermediaryNames() {
-        return sourcesUseIntermediaryNames;
+    public NamingScheme namingScheme() {
+        return namingScheme;
     }
 
     /**
@@ -143,6 +168,19 @@ public class ProcessGeneration {
      */
     public boolean generateDistSourceManifest() {
         return generateDistSourceManifest;
+    }
+
+    @Nullable
+    public String defaultLegacyMcpMappings() {
+        return defaultLegacyMcpMappings;
+    }
+
+    /**
+     * Whether this version ships a built-in default MCP mapping (currently only 1.12.2), as opposed
+     * to legacy versions that require the user to supply the MCP CSV mappings via --mcp-mappings.
+     */
+    public boolean usesBundledMcpDefaults() {
+        return defaultLegacyMcpMappings != null;
     }
 
     /**

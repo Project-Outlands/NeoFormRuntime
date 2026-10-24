@@ -94,7 +94,7 @@ public class InjectFromZipFileSource implements InjectSource {
                 try (var in = zf.getInputStream(entry)) {
                     // Relocate the entry
                     var copiedEntry = new ZipEntry(entry.getName().substring(sourcePath.length()));
-                    if (copiedEntry.getName().isEmpty()) {
+                    if (copiedEntry.getName().isEmpty() || copiedEntry.getName().equals("package-info-template.java")) {
                         continue;
                     }
                     copiedEntry.setMethod(entry.getMethod());
@@ -115,6 +115,15 @@ public class InjectFromZipFileSource implements InjectSource {
                 }
             }
         }
+    }
+
+    /**
+     * Optional regex for filtering which entries from this source will be injected.
+     * The relative path in the ZIP file will be matched against this regular expression.
+     */
+    @Nullable
+    public Pattern includeFilterPattern() {
+        return includeFilterPattern;
     }
 
     private boolean matchesIncludeFilter(ZipEntry entry) {

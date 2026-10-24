@@ -23,7 +23,12 @@ import java.util.zip.ZipOutputStream;
 public class RemapSrgSourcesAction implements ExecutionNodeAction {
     private static final Pattern SRG_FINDER = Pattern.compile("[fF]unc_\\d+_[a-zA-Z_]+|m_\\d+_|[fF]ield_\\d+_[a-zA-Z_]+|f_\\d+_");
 
-    static IMappingFile buildSrgToOfficialMappings(ProcessingEnvironment environment) throws IOException {
+    static IMappingFile buildSrgToNamedMappings(ProcessingEnvironment environment) throws IOException {
+        var directMappingsPath = environment.getInputPath("mappings");
+        if (directMappingsPath != null) {
+            return IMappingFile.load(directMappingsPath.toFile());
+        }
+
         var officialMappingsPath = environment.getRequiredInputPath("officialMappings");
         var mergeMappingsPath = environment.getRequiredInputPath("mergedMappings");
 
@@ -36,7 +41,7 @@ public class RemapSrgSourcesAction implements ExecutionNodeAction {
 
     @Override
     public void run(ProcessingEnvironment environment) throws IOException, InterruptedException {
-        var srgToOfficial = buildSrgToOfficialMappings(environment);
+        var srgToOfficial = buildSrgToNamedMappings(environment);
         var srgNamesToOfficial = new HashMap<String, String>();
         for (var mappedClass : srgToOfficial.getClasses()) {
             for (var mappedField : mappedClass.getFields()) {

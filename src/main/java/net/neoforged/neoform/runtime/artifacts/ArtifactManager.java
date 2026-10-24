@@ -31,9 +31,11 @@ import java.util.List;
 import java.util.Map;
 import java.util.Objects;
 import java.util.Properties;
+import java.util.regex.Pattern;
 
 public class ArtifactManager {
     private static final Logger LOG = Logger.create();
+    private static final Pattern MAVEN_METADATA_VERSION_PATTERN = Pattern.compile("<version>([^<]+)</version>");
 
     private static final URI MINECRAFT_LIBRARIES_URI = URI.create("https://libraries.minecraft.net");
     private final List<URI> repositoryBaseUrls;
@@ -57,6 +59,15 @@ public class ArtifactManager {
         this.launcherManifestUrl = launcherManifestUrl;
         this.artifactsCache = cacheManager.getArtifactCacheDir();
         this.launcherInstallations = launcherInstallations;
+    }
+
+    /**
+     * Adds a repository that is consulted after all configured repositories.
+     */
+    public void addAdditionalRepository(URI repositoryBaseUrl) {
+        if (!repositoryBaseUrls.contains(repositoryBaseUrl)) {
+            repositoryBaseUrls.add(repositoryBaseUrl);
+        }
     }
 
     public Artifact get(MinecraftLibrary library) throws IOException {
@@ -98,6 +109,10 @@ public class ArtifactManager {
     }
 
     public Artifact get(MavenCoordinate artifactCoordinate, URI repositoryBaseUrl) throws IOException {
+        if (isDynamicVersion(artifactCoordinate)) {
+            artifactCoordinate = resolveDynamicVersion(artifactCoordinate, List.of(repositoryBaseUrl)).coordinate();
+        }
+
         var externalArtifact = getFromExternalManifest(artifactCoordinate);
         if (externalArtifact != null) {
             return externalArtifact;
@@ -120,6 +135,11 @@ public class ArtifactManager {
     }
 
     public Artifact get(MavenCoordinate mavenCoordinate) throws IOException {
+        if (isDynamicVersion(mavenCoordinate)) {
+            var resolved = resolveDynamicVersion(mavenCoordinate, repositoryBaseUrls);
+            return get(resolved.coordinate(), resolved.repositoryBaseUrl());
+        }
+
         var externalArtifact = getFromExternalManifest(mavenCoordinate);
         if (externalArtifact != null) {
             return externalArtifact;
@@ -127,8 +147,11 @@ public class ArtifactManager {
 
         var finalLocation = artifactsCache.resolve(mavenCoordinate.toRelativeRepositoryPath());
 
-        // Special case: NeoForge reference libraries that are only available via the Mojang download server
+        // Special cases for libraries that are only available via Mojang's library repository.
         if (mavenCoordinate.groupId().equals("com.mojang") && mavenCoordinate.artifactId().equals("logging")) {
+            return get(mavenCoordinate, MINECRAFT_LIBRARIES_URI);
+        }
+        if (mavenCoordinate.groupId().equals("net.minecraft") && mavenCoordinate.artifactId().equals("launchwrapper")) {
             return get(mavenCoordinate, MINECRAFT_LIBRARIES_URI);
         }
 
@@ -144,6 +167,102 @@ public class ArtifactManager {
 
             throw new FileNotFoundException("Could not find " + mavenCoordinate + " in any repository.");
         });
+    }
+
+    private ResolvedDynamicVersion resolveDynamicVersion(MavenCoordinate mavenCoordinate, List<URI> repositories) throws IOException {
+        String prefix = mavenCoordinate.version().substring(0, mavenCoordinate.version().length() - 1);
+        ResolvedDynamicVersion best = null;
+        IOException lastError = null;
+
+        for (var repositoryBaseUrl : repositories) {
+            try {
+                var version = findBestVersionInRepository(mavenCoordinate, repositoryBaseUrl, prefix);
+                if (version != null && (best == null || compareMavenVersions(version, best.coordinate().version()) > 0)) {
+                    best = new ResolvedDynamicVersion(mavenCoordinate.withVersion(version), repositoryBaseUrl);
+                }
+            } catch (FileNotFoundException ignored) {
+            } catch (IOException e) {
+                lastError = e;
+            }
+        }
+
+        if (best != null) {
+            return best;
+        }
+        if (lastError != null) {
+            throw lastError;
+        }
+
+        throw new FileNotFoundException("Could not resolve dynamic version " + mavenCoordinate + " in any repository.");
+    }
+
+    private String findBestVersionInRepository(MavenCoordinate mavenCoordinate, URI repositoryBaseUrl, String prefix) throws IOException {
+        var metadataUri = toMetadataUri(mavenCoordinate, repositoryBaseUrl);
+        var metadataPath = artifactsCache
+                .resolve("_maven_metadata")
+                .resolve(HashingUtil.sha1(repositoryBaseUrl.toString()))
+                .resolve(mavenCoordinate.groupId().replace('.', '/'))
+                .resolve(mavenCoordinate.artifactId())
+                .resolve("maven-metadata.xml");
+
+        downloadManager.download(metadataUri, metadataPath);
+
+        String metadata = Files.readString(metadataPath);
+        String best = null;
+        var matcher = MAVEN_METADATA_VERSION_PATTERN.matcher(metadata);
+        while (matcher.find()) {
+            var version = matcher.group(1);
+            if (version.startsWith(prefix) && !isDynamicVersion(version) && (best == null || compareMavenVersions(version, best) > 0)) {
+                best = version;
+            }
+        }
+        return best;
+    }
+
+    private static URI toMetadataUri(MavenCoordinate mavenCoordinate, URI repositoryBaseUrl) {
+        var relativePath = mavenCoordinate.groupId().replace('.', '/')
+                           + "/" + mavenCoordinate.artifactId()
+                           + "/maven-metadata.xml";
+        var originalBaseUri = repositoryBaseUrl.toString();
+        if (originalBaseUri.endsWith("/")) {
+            return URI.create(originalBaseUri + relativePath);
+        } else {
+            return URI.create(originalBaseUri + "/" + relativePath);
+        }
+    }
+
+    private static boolean isDynamicVersion(MavenCoordinate mavenCoordinate) {
+        return isDynamicVersion(mavenCoordinate.version());
+    }
+
+    private static boolean isDynamicVersion(String version) {
+        return version.endsWith("+");
+    }
+
+    private static int compareMavenVersions(String left, String right) {
+        var leftParts = left.split("[.-]");
+        var rightParts = right.split("[.-]");
+        int length = Math.max(leftParts.length, rightParts.length);
+        for (int i = 0; i < length; i++) {
+            var leftPart = i < leftParts.length ? leftParts[i] : "0";
+            var rightPart = i < rightParts.length ? rightParts[i] : "0";
+            int comparison = compareMavenVersionPart(leftPart, rightPart);
+            if (comparison != 0) {
+                return comparison;
+            }
+        }
+        return 0;
+    }
+
+    private static int compareMavenVersionPart(String left, String right) {
+        try {
+            return Integer.compare(Integer.parseInt(left), Integer.parseInt(right));
+        } catch (NumberFormatException ignored) {
+            return left.compareTo(right);
+        }
+    }
+
+    private record ResolvedDynamicVersion(MavenCoordinate coordinate, URI repositoryBaseUrl) {
     }
 
     public List<Path> resolveClasspath(Collection<ClasspathItem> classpathItems) throws IOException {

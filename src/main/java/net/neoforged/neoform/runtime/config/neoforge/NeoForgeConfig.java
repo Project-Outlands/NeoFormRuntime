@@ -5,6 +5,7 @@ import com.google.gson.JsonArray;
 import com.google.gson.JsonObject;
 import com.google.gson.JsonSyntaxException;
 import com.google.gson.annotations.SerializedName;
+import net.neoforged.neoform.runtime.config.neoform.NeoFormFunction;
 import net.neoforged.neoform.runtime.utils.FilenameUtil;
 import net.neoforged.neoform.runtime.utils.MavenCoordinate;
 import org.jetbrains.annotations.Nullable;
@@ -26,8 +27,11 @@ public record NeoForgeConfig(
         @SerializedName("patches") String patchesFolder,
         @SerializedName("sources") String sourcesArtifact,
         @SerializedName("universal") String universalArtifact,
+        List<String> universalFilters,
         @SerializedName("patchesOriginalPrefix") @Nullable String basePathPrefix,
         @SerializedName("patchesModifiedPrefix") @Nullable String modifiedPathPrefix,
+        @SerializedName("processor") @Nullable NeoFormFunction sourceProcessor,
+        boolean notchObf,
         Map<String, JsonObject> runs,
         List<MavenCoordinate> libraries,
         List<String> modules,
@@ -65,6 +69,9 @@ public record NeoForgeConfig(
         // Ensure that 'sass' is an empty list to avoid nullability issues
         if (!root.has("sass")) {
             root.add("sass", new JsonArray());
+        }
+        if (!root.has("universalFilters")) {
+            root.add("universalFilters", new JsonArray());
         }
 
         try {

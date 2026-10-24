@@ -23,6 +23,11 @@ public record NeoFormConfig(int spec,
                             Map<String, List<NeoFormStep>> steps,
                             Map<String, NeoFormFunction> functions,
                             Map<String, List<MavenCoordinate>> libraries) {
+    public NeoFormConfig {
+        if (javaVersion == 0) {
+            javaVersion = spec <= 1 ? 8 : 21;
+        }
+    }
 
     public NeoFormDistConfig getDistConfig(String dist) {
         if (!steps.containsKey(dist)) {
@@ -72,4 +77,3 @@ public record NeoFormConfig(int spec,
         }
     }
 }
-

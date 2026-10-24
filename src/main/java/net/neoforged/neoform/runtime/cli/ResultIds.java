@@ -24,7 +24,8 @@ public final class ResultIds {
      */
     public static final String GAME_SOURCES_WITH_NEOFORGE = "gameSourcesWithNeoForge";
     /**
-     * Same as {@link #GAME_JAR}, but .class files from the NeoForge universal jar are merged into the jar file.
+     * Same as {@link #GAME_JAR}, but NeoForge classes and required runtime metadata from the universal jar are
+     * merged into the jar file.
      * Should be considered deprecated as NeoForge should be added separately to the classpath.
      */
     public static final String GAME_JAR_WITH_NEOFORGE = "gameJarWithNeoForge";
@@ -58,15 +59,33 @@ public final class ResultIds {
      */
     public static final String NAMED_TO_INTERMEDIARY_MAPPING = "namedToIntermediaryMapping";
     /**
+     * Same as {@link #NAMED_TO_INTERMEDIARY_MAPPING}, serialized as SRG for legacy MCP consumers.
+     * Only available in legacy MCP processes.
+     */
+    public static final String NAMED_TO_INTERMEDIARY_MAPPING_SRG = "namedToIntermediaryMappingSrg";
+    /**
      * A SRG mapping file to map from intermediary-names to developer-facing names.
      * Only available in legacy processes where artifacts, patches and runtime use an intermediary naming scheme.
      */
     public static final String INTERMEDIARY_TO_NAMED_MAPPING = "intermediaryToNamedMapping";
     /**
+     * Same as {@link #INTERMEDIARY_TO_NAMED_MAPPING}, serialized as TSRG v1 for legacy runtime consumers.
+     */
+    public static final String INTERMEDIARY_TO_NAMED_MAPPING_TSRG = "intermediaryToNamedMappingTsrg";
+    /**
+     * Same as {@link #INTERMEDIARY_TO_NAMED_MAPPING}, serialized as TSRG v2, including method parameter mappings.
+     */
+    public static final String INTERMEDIARY_TO_NAMED_MAPPING_TSRG2 = "intermediaryToNamedMappingTsrg2";
+    /**
      * Same as {@link #INTERMEDIARY_TO_NAMED_MAPPING}, but in CSV format which is used at runtime to provide
      * mapping services for reflection by Forge.
      */
     public static final String CSV_MAPPING = "csvMapping";
+    /**
+     * A SRG mapping file to map from notch (Mojang obfuscated) names to intermediary (SRG) names.
+     * Only available in legacy MCP processes. Used for ForgeGradle-2 cache compatibility.
+     */
+    public static final String NOTCH_TO_INTERMEDIARY_MAPPING = "notchToIntermediaryMapping";
     /**
      * Only available if the process defines a step to strip the non-class-files out of the client jar file.
      * This result is the zip file containing all of those stripped resources (any non .class file).
