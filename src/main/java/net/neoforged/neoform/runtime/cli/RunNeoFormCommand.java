@@ -686,6 +686,10 @@ public class RunNeoFormCommand extends NeoFormEngineCommand {
             } catch (NoSuchFileException ignored) {
             }
 
+            var targetParent = entry.getValue().toAbsolutePath().getParent();
+            if (targetParent != null) {
+                Files.createDirectories(targetParent);
+            }
             var tmpFile = Paths.get(entry.getValue() + ".tmp");
             Files.copy(result, tmpFile, StandardCopyOption.REPLACE_EXISTING);
             FileUtil.atomicMove(tmpFile, entry.getValue());
