@@ -295,8 +295,8 @@ idea {
                 "Run Neoform 1.12.2 (joined)"(Application) {
                     mainClass = mainClassName
                     programParameters = "run --dist joined " +
-                            "--add-repository https://maven.minecraftforge.net " +
-                            "--neoform de.oceanlabs.mcp:mcp_config:1.12.2-20201025.185735@zip " +
+                            "--add-repository https://maven.outlands.top/releases " +
+                            "--neoform de.oceanlabs.mcp:mcp_config:1.12.2-20261101.012340@zip " +
                             "--mcp-mappings de.oceanlabs.mcp:mcp_stable:39-1.12@zip " +
                             "--write-result=clientResources:build/1.12.2/vanilla/client-resources.jar " +
                             "--write-result=serverResources:build/1.12.2/vanilla/server-resources.jar " +
