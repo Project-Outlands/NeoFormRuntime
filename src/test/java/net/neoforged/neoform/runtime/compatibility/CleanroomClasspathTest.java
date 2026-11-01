@@ -66,6 +66,29 @@ class CleanroomClasspathTest {
     }
 
     @Test
+    void appliesCleanroomRulesToOutlandsRecompileClasspath() {
+        var retained = minecraftLibrary("example:retained:1.0");
+        var manifest = versionManifest(List.of(
+                minecraftLibrary("org.lwjgl.lwjgl:lwjgl:2.9.4"),
+                retained));
+        var classpath = new ExtensibleClasspath();
+
+        var configured = CleanroomClasspath.configureRecompileIfNeeded(
+                "top.outlands:outlands:1.0.0:universal", userdevLibraries(), classpath);
+
+        // Outlands compiles its in-tree LWJGL2-compat shims against real LWJGL3, so lwjglx must not be added
+        assertThat(configured).isTrue();
+        assertThat(classpath.mergeWithMinecraftLibraries(manifest).getEffectiveClasspath())
+                .containsExactly(
+                        ClasspathItem.of(retained),
+                        ClasspathItem.of(MavenCoordinate.parse("io.netty:netty-common:4.2.15.Final")),
+                        ClasspathItem.of(MavenCoordinate.parse("com.ibm.icu:icu4j:78.3")),
+                        ClasspathItem.of(MavenCoordinate.parse("com.github.oshi:oshi-core-ffm:7.3.2")),
+                        ClasspathItem.of(MavenCoordinate.parse("net.java.dev.jna:jna-platform:5.19.1")),
+                        ClasspathItem.of(MavenCoordinate.parse("com.cleanroommc:lwjglxx:1.1.21")));
+    }
+
+    @Test
     void leavesForgeListLibrariesClasspathUntouched() {
         var lwjgl2 = minecraftLibrary("org.lwjgl.lwjgl:lwjgl:2.9.4");
         var manifest = versionManifest(List.of(lwjgl2));

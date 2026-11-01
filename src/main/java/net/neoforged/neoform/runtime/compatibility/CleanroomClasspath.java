@@ -8,11 +8,14 @@ import java.util.Collection;
 import java.util.List;
 
 /**
- * Applies the classpath compatibility rules required by Cleanroom userdev.
+ * Applies the classpath compatibility rules required by Cleanroom-style userdev
+ * (Cleanroom itself and forks of it, such as Outlands).
  */
 public final class CleanroomClasspath {
     private static final String CLEANROOM_GROUP = "com.cleanroommc";
     private static final String CLEANROOM_ARTIFACT = "cleanroom";
+    private static final String OUTLANDS_GROUP = "top.outlands";
+    private static final String OUTLANDS_ARTIFACT = "outlands";
     private static final MavenCoordinate LWJGLX = MavenCoordinate.parse("com.cleanroommc:lwjglx:1.0.0");
 
     /**
@@ -59,18 +62,33 @@ public final class CleanroomClasspath {
         }
 
         excludeObsoleteMinecraftLibraries(classpath);
-        classpath.addMavenLibraries(List.of(LWJGLX));
+        if (isCleanroomArtifact(universalArtifact)) {
+            // Outlands carries its own LWJGL2-compat shims as sources compiled against real LWJGL3,
+            // so the lwjglx emulation layer must not shadow it there.
+            classpath.addMavenLibraries(List.of(LWJGLX));
+        }
         addCleanroomUserdevLibraries(userdevLibraries, classpath);
         return true;
     }
 
     private static boolean isCleanroomUniversalArtifact(String universalArtifact) {
+        return isCleanroomArtifact(universalArtifact) || isOutlandsArtifact(universalArtifact);
+    }
+
+    private static boolean isCleanroomArtifact(String universalArtifact) {
+        return matchesArtifact(universalArtifact, CLEANROOM_GROUP, CLEANROOM_ARTIFACT);
+    }
+
+    private static boolean isOutlandsArtifact(String universalArtifact) {
+        return matchesArtifact(universalArtifact, OUTLANDS_GROUP, OUTLANDS_ARTIFACT);
+    }
+
+    private static boolean matchesArtifact(String universalArtifact, String groupId, String artifactId) {
         if (!universalArtifact.matches("[^:]+:[^:]+:[^:@]+(?::[^@]+)?(?:@[^:]+)?")) {
             return false;
         }
         var universal = MavenCoordinate.parse(universalArtifact);
-        return CLEANROOM_GROUP.equals(universal.groupId())
-                && CLEANROOM_ARTIFACT.equals(universal.artifactId());
+        return groupId.equals(universal.groupId()) && artifactId.equals(universal.artifactId());
     }
 
     private static void excludeObsoleteMinecraftLibraries(ExtensibleClasspath classpath) {
