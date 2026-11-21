@@ -92,6 +92,12 @@ public class ExternalJavaToolAction implements ExecutionNodeAction {
         this.useHostJavaExecutable = true;
     }
 
+    public ExternalJavaToolAction(String mainClass, ToolCoordinate... hostTools) {
+        this.classpath = java.util.Arrays.stream(hostTools).map(ToolCoordinate::version).toList();
+        this.mainClass = Objects.requireNonNull(mainClass);
+        this.useHostJavaExecutable = true;
+    }
+
     @Override
     public void run(ProcessingEnvironment environment) throws IOException, InterruptedException {
         var listLibrariesFile = listLibraries != null ? listLibraries.writeFile(environment) : null;
@@ -159,7 +165,7 @@ public class ExternalJavaToolAction implements ExecutionNodeAction {
 
         // Program Arguments
         boolean isVineflower = isVineflower();
-        for (var arg : args) {
+        for (var arg : getProgramArguments(environment)) {
             // For specific tasks we "fixup" the neoform spec
             if (isVineflower) {
                 arg = arg.replace("TRACE", "WARN");
@@ -327,6 +333,10 @@ public class ExternalJavaToolAction implements ExecutionNodeAction {
                 this.jvmArgs.add("-Xmx" + allowedMebibytes + "m");
             }
         }
+    }
+
+    protected List<String> getProgramArguments(ProcessingEnvironment environment) throws IOException {
+        return args;
     }
 
     public List<String> getArgs() {

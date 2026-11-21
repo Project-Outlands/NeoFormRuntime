@@ -1,6 +1,5 @@
 package net.neoforged.neoform.runtime.engine;
 
-import net.neoforged.neoform.runtime.actions.ApplyMcpCsvDataAction;
 import net.neoforged.neoform.runtime.actions.CreateLegacyMappingsAction;
 import net.neoforged.neoform.runtime.actions.CreateLibrariesOptionsFile;
 import net.neoforged.neoform.runtime.actions.CreateMcpMappingsAction;
@@ -17,6 +16,7 @@ import net.neoforged.neoform.runtime.actions.RecompileSourcesAction;
 import net.neoforged.neoform.runtime.actions.RecompileSourcesActionWithECJ;
 import net.neoforged.neoform.runtime.actions.RecompileSourcesActionWithJDK;
 import net.neoforged.neoform.runtime.actions.RemapSrgClassesAction;
+import net.neoforged.neoform.runtime.actions.RemapMcpSourcesAction;
 import net.neoforged.neoform.runtime.actions.RemapSrgSourcesAction;
 import net.neoforged.neoform.runtime.actions.SplitResourcesFromClassesAction;
 import net.neoforged.neoform.runtime.artifacts.ArtifactManager;
@@ -239,12 +239,10 @@ public class NeoFormEngine implements AutoCloseable {
                     && graph.hasOutput("downloadClientMappings", "output")) {
                 addOfficialIntermediaryRemap(decompileInput);
             } else {
-                addLegacySrgToNamedRemap(decompileInput);
+                addMcpRemap(decompileInput);
             }
         } else if (namingScheme == ProcessGeneration.NamingScheme.MCP) {
-            // Legacy MCP: classes are remapped to MCP names on the bytecode level *before* decompilation,
-            // so that decompiled sources directly carry MCP names; only javadocs remain for the sources.
-            addMcpBytecodeRemap(decompileInput);
+            addMcpRemap(decompileInput);
         } else {
             // Without the presence of further patching or renaming, the game jar without recompilation is the deobfuscated vanilla jar
             graph.setResultFromCurrentInput(ResultIds.GAME_JAR_NO_RECOMP, decompileInput);
@@ -301,45 +299,15 @@ public class NeoFormEngine implements AutoCloseable {
         createMappings.build();
     }
 
-    /**
-     * Legacy versions with TSRG but no Mojang mappings (1.13-1.16.5 style): sources are decompiled
-     * with SRG names and remapped textually after patching; classes are remapped to the named jar.
-     */
-    private void addLegacySrgToNamedRemap(NodeInput decompileInput) {
-        var mcpMappingOutputs = createMcpMappingNodes();
-        var srgToMcp = mcpMappingOutputs.srgToMcp();
-        var srgToMcpTsrg2 = mcpMappingOutputs.srgToMcpTsrg2();
-        var csvMappings = mcpMappingOutputs.csvMappings();
-
-        applyTransforms(List.of(
-                new ReplaceNodeOutput(
-                        "patch",
-                        "output",
-                        "applyMcpCsvData",
-                        (builder, previousNodeOutput) -> {
-                            builder.input("sources", previousNodeOutput.asInput());
-                            builder.input("mappings", srgToMcp.asInput());
-                            builder.input("csvMappings", csvMappings.asInput());
-                            builder.action(new ApplyMcpCsvDataAction());
-                            return builder.output("output", NodeOutputType.ZIP, "MCP sources with CSV parameter names and Javadocs applied.");
-                        }
-                )
-        ));
-
-        applyTransforms(List.of(
-                new ReplaceNodeOutput(
-                        "applyMcpCsvData",
-                        "output",
-                        SOURCES_TO_NAMED,
-                        (builder, previousNodeOutput) -> {
-                            builder.input("sources", previousNodeOutput.asInput());
-                            builder.input("mappings", srgToMcp.asInput());
-                            var action = new RemapSrgSourcesAction();
-                            builder.action(action);
-                            return builder.output("output", NodeOutputType.ZIP, "Sources with SRG method and field names remapped to MCP.");
-                        }
-                )
-        ));
+    private void addMcpRemap(NodeInput decompileInput) {
+        var srgToMcpTsrg2 = createMcpMappingNodes();
+        applyTransform(new ReplaceNodeOutput("patch", "output", SOURCES_TO_NAMED, (builder, patched) -> {
+            builder.input("sources", patched.asInput());
+            builder.input("csv", NodeInput.ofPath(legacyMcpMappingsPath));
+            builder.inputFromNodeOutput("versionManifest", "downloadJson", "output");
+            builder.action(new RemapMcpSourcesAction((RecompileSourcesAction) graph.getRequiredNode("recompile").action()));
+            return builder.output("output", NodeOutputType.ZIP, "Patched MCP sources, including parameter names and documentation.");
+        }));
 
         var builder = graph.nodeBuilder(CLASSES_TO_NAMED);
         builder.input("input", decompileInput.copy());
@@ -349,65 +317,6 @@ public class NeoFormEngine implements AutoCloseable {
         builder.build();
 
         graph.setResult(ResultIds.GAME_JAR_NO_RECOMP, mcpOutput);
-    }
-
-    /**
-     * Legacy MCP (1.12.2): the MCP patches are written against SRG-named sources, so sources must be
-     * decompiled from SRG-named classes and only receive javadoc/parameter data after patching.
-     * The bytecode-level SRG to MCP remapping is performed on the decompile input; when running a
-     * userdev pipeline the CLI repoints this node at the NeoForge-combined jar instead.
-     */
-    private void addMcpBytecodeRemap(NodeInput decompileInput) {
-        var mcpMappingOutputs = createMcpMappingNodes();
-        var srgToMcp = mcpMappingOutputs.srgToMcp();
-        var srgToMcpTsrg2 = mcpMappingOutputs.srgToMcpTsrg2();
-        var csvMappings = mcpMappingOutputs.csvMappings();
-
-        // The sources keep SRG names through patching; afterwards apply parameter names and javadocs
-        // from the MCP CSV files, then remap the SRG names in the sources to MCP.
-        applyTransforms(List.of(
-                new ReplaceNodeOutput(
-                        "patch",
-                        "output",
-                        "applyMcpCsvData",
-                        (builder, previousNodeOutput) -> {
-                            builder.input("sources", previousNodeOutput.asInput());
-                            builder.input("mappings", srgToMcp.asInput());
-                            builder.input("csvMappings", csvMappings.asInput());
-                            builder.action(new ApplyMcpCsvDataAction());
-                            return builder.output("output", NodeOutputType.ZIP, "MCP sources with CSV parameter names and Javadocs applied.");
-                        }
-                )
-        ));
-
-        applyTransforms(List.of(
-                new ReplaceNodeOutput(
-                        "applyMcpCsvData",
-                        "output",
-                        SOURCES_TO_NAMED,
-                        (builder, previousNodeOutput) -> {
-                            builder.input("sources", previousNodeOutput.asInput());
-                            builder.input("mappings", srgToMcp.asInput());
-                            var action = new RemapSrgSourcesAction();
-                            builder.action(action);
-                            return builder.output("output", NodeOutputType.ZIP, "Sources with SRG method and field names remapped to MCP.");
-                        }
-                )
-        ));
-
-        var builder = graph.nodeBuilder(CLASSES_TO_NAMED);
-        builder.input("input", decompileInput.copy());
-        builder.input("mappings", srgToMcpTsrg2.asInput());
-        var mcpOutput = builder.output("output", NodeOutputType.JAR, "Classes with SRG method and field names remapped to MCP.");
-        builder.action(new RemapSrgClassesAction());
-        builder.build();
-
-        graph.setResult(ResultIds.GAME_JAR_NO_RECOMP, mcpOutput);
-    }
-
-    private record McpMappingOutputs(NodeOutput srgToMcp,
-                                     NodeOutput srgToMcpTsrg2,
-                                     NodeOutput csvMappings) {
     }
 
     /**
@@ -415,7 +324,7 @@ public class NeoFormEngine implements AutoCloseable {
      * paths. The source/class remap node ids are the fixed role ids {@link #SOURCES_TO_NAMED} and
      * {@link #CLASSES_TO_NAMED}.
      */
-    private McpMappingOutputs createMcpMappingNodes() {
+    private NodeOutput createMcpMappingNodes() {
         if (legacyMcpMappingsPath == null) {
             throw new IllegalStateException("NFRT needs MCP CSV mappings for legacy MCP versions without official Mojang mappings. Use --mcp-mappings=<gav|path>, for example de.oceanlabs.mcp:mcp_stable:39-1.12@zip for Minecraft 1.12.2.");
         }
@@ -424,23 +333,19 @@ public class NeoFormEngine implements AutoCloseable {
         }
 
         var createMappings = graph.nodeBuilder("createMcpMappings");
-        createMappings.action(new CreateMcpMappingsAction(
-                legacyMcpMappingsPath,
-                "mappings"
-        ));
+        createMappings.input("csv", NodeInput.ofPath(legacyMcpMappingsPath));
+        createMappings.action(new CreateMcpMappingsAction());
         graph.setResult(ResultIds.NAMED_TO_INTERMEDIARY_MAPPING, createMappings.output("mcpToSrgTsrg", NodeOutputType.TSRG, "A TSRG v1 mapping file that maps MCP names to SRG names"));
         graph.setResult(ResultIds.NAMED_TO_INTERMEDIARY_MAPPING_SRG, createMappings.output("mcpToSrg", NodeOutputType.SRG, "An SRG mapping file that maps MCP names to SRG names"));
-        var srgToMcp = createMappings.output("srgToMcp", NodeOutputType.SRG, "A mapping file that maps SRG names to MCP names");
-        graph.setResult(ResultIds.INTERMEDIARY_TO_NAMED_MAPPING, srgToMcp);
+        graph.setResult(ResultIds.INTERMEDIARY_TO_NAMED_MAPPING, createMappings.output("srgToMcp", NodeOutputType.SRG, "A mapping file that maps SRG names to MCP names"));
         graph.setResult(ResultIds.INTERMEDIARY_TO_NAMED_MAPPING_TSRG, createMappings.output("srgToMcpTsrg", NodeOutputType.TSRG, "A TSRG v1 mapping file that maps SRG names to MCP names"));
         var srgToMcpTsrg2 = createMappings.output("srgToMcpTsrg2", NodeOutputType.TSRG2, "A TSRG v2 mapping file that maps SRG names to MCP names, including method parameter names");
         graph.setResult(ResultIds.INTERMEDIARY_TO_NAMED_MAPPING_TSRG2, srgToMcpTsrg2);
-        var csvMappings = createMappings.output("csvMappings", NodeOutputType.ZIP, "A zip containing MCP CSV mappings");
-        graph.setResult(ResultIds.CSV_MAPPING, csvMappings);
+        graph.setResult(ResultIds.CSV_MAPPING, createMappings.output("csvMappings", NodeOutputType.ZIP, "A zip containing MCP CSV mappings"));
         graph.setResult(ResultIds.NOTCH_TO_INTERMEDIARY_MAPPING, createMappings.output("notchToSrg", NodeOutputType.SRG, "A mapping file that maps notch (obfuscated) names to SRG names"));
         createMappings.build();
 
-        return new McpMappingOutputs(srgToMcp, srgToMcpTsrg2, csvMappings);
+        return srgToMcpTsrg2;
     }
 
     private NodeOutput addRecompileStep(NeoFormDistConfig distConfig, NodeOutput sourcesOutput) {

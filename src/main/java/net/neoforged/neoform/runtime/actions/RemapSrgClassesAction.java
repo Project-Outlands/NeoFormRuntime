@@ -16,7 +16,7 @@ public class RemapSrgClassesAction extends ExternalJavaToolAction {
     public void run(ProcessingEnvironment environment) throws IOException, InterruptedException {
         var mappingsFile = environment.getInputPath("mappings");
         if (mappingsFile == null) {
-            var srgToOfficial = RemapSrgSourcesAction.buildSrgToNamedMappings(environment);
+            var srgToOfficial = RemapSrgSourcesAction.buildSrgToOfficialMappings(environment);
             mappingsFile = environment.getWorkspace().resolve("mappings.tsrg2");
             srgToOfficial.write(mappingsFile, IMappingFile.Format.TSRG2, false);
         }

@@ -3,6 +3,7 @@ package net.neoforged.neoform.runtime.graph;
 import net.neoforged.neoform.runtime.cache.CacheKeyBuilder;
 
 import java.io.IOException;
+import java.nio.file.Path;
 import java.util.Collection;
 import java.util.Set;
 
@@ -38,6 +39,35 @@ public abstract class NodeInput {
     public abstract <T> T getValue(ResultRepresentation<T> representation) throws IOException;
 
     public abstract NodeInput copy();
+
+    public static NodeInput ofPath(Path file) {
+        var path = file.toAbsolutePath().normalize();
+        return new NodeInput() {
+            @Override
+            public Collection<ExecutionNode> getNodeDependencies() {
+                return Set.of();
+            }
+
+            @Override
+            public void replaceReferences(NodeOutput oldOutput, NodeOutput newOutput) {
+            }
+
+            @Override
+            public void collectCacheKeyComponent(CacheKeyBuilder builder) {
+                builder.addPath(getId(), path);
+            }
+
+            @Override
+            public <T> T getValue(ResultRepresentation<T> representation) throws IOException {
+                return representation.loader().load(path);
+            }
+
+            @Override
+            public NodeInput copy() {
+                return ofPath(path);
+            }
+        };
+    }
 
     public static final class NodeInputForOutput extends NodeInput {
         private NodeOutput output;

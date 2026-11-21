@@ -17,19 +17,12 @@ import java.util.zip.ZipOutputStream;
 
 /**
  * Takes a zip-file of Java sources and replaces SRG identifiers with
- * identifiers from a mapping file. The mappings are either given directly via the
- * {@code mappings} input, or derived from the {@code mergedMappings} and {@code officialMappings}
- * inputs on the intermediary pipeline.
+ * official names on the Mojang intermediary pipeline. Legacy MCP sources use JST instead.
  */
 public class RemapSrgSourcesAction implements ExecutionNodeAction {
     private static final Pattern SRG_FINDER = Pattern.compile("[fF]unc_\\d+_[a-zA-Z_]+|m_\\d+_|[fF]ield_\\d+_[a-zA-Z_]+|f_\\d+_");
 
-    static IMappingFile buildSrgToNamedMappings(ProcessingEnvironment environment) throws IOException {
-        var directMappingsPath = environment.getInputPath("mappings");
-        if (directMappingsPath != null) {
-            return IMappingFile.load(directMappingsPath.toFile());
-        }
-
+    static IMappingFile buildSrgToOfficialMappings(ProcessingEnvironment environment) throws IOException {
         var officialMappingsPath = environment.getRequiredInputPath("officialMappings");
         var mergeMappingsPath = environment.getRequiredInputPath("mergedMappings");
 
@@ -42,7 +35,7 @@ public class RemapSrgSourcesAction implements ExecutionNodeAction {
 
     @Override
     public void run(ProcessingEnvironment environment) throws IOException, InterruptedException {
-        var srgToNamed = buildSrgToNamedMappings(environment);
+        var srgToNamed = buildSrgToOfficialMappings(environment);
         var srgNamesToNamed = new HashMap<String, String>();
         for (var mappedClass : srgToNamed.getClasses()) {
             for (var mappedField : mappedClass.getFields()) {

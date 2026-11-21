@@ -9,6 +9,7 @@ import net.neoforged.neoform.runtime.cli.ResultIds;
 import net.neoforged.neoform.runtime.cli.RunNeoFormCommand;
 import net.neoforged.neoform.runtime.engine.NeoFormEngine;
 import net.neoforged.neoform.runtime.utils.MavenCoordinate;
+import net.neoforged.neoform.runtime.utils.ToolCoordinate;
 import org.junit.jupiter.api.Nested;
 import org.junit.jupiter.api.Test;
 import picocli.CommandLine;
@@ -133,9 +134,18 @@ public class NeoFormGraphTest {
     void testMCP_1_12_2_SourceChainKeepsSrgUntilPatched() {
         var graph = buildGraph("--neoform", "de.oceanlabs.mcp:mcp_config:1.12.2@zip");
 
-        // 1.12.2 MCP patches are written against SRG names, so sources keep SRG names until
-        // applyMcpCsvData (javadoc/params) and remapSourcesToNamed (names) after patching.
-        assertNodeChain(graph, "rename", "mcinject", "decompile", "inject", "patch", "applyMcpCsvData", "remapSourcesToNamed");
+        assertNodeChain(graph, "rename", "mcinject", "decompile", "inject", "patch", "remapSourcesToNamed");
+        assertNotPredecessor(graph, "createMcpMappings", "remapSourcesToNamed");
+        assertNotPredecessor(graph, "remapSourcesToNamed", "remapClassesToNamed");
+
+        var mcpTool = ToolCoordinate.JST_MCP.version();
+        var sourceTool = (ExternalJavaToolAction) graph.getRequiredNode("remapSourcesToNamed").action();
+        assertThat(sourceTool.getMainClass()).isEqualTo("net.neoforged.jst.cli.Main");
+        assertThat(sourceTool.getClasspath()).contains(mcpTool);
+        assertThat(sourceTool.getArgs()).contains("--enable-mcp");
+        var exporter = (ExternalJavaToolAction) graph.getRequiredNode("createMcpMappings").action();
+        assertThat(exporter.getClasspath()).contains(mcpTool);
+
         // The class remap to MCP happens on the bytecode level; with a userdev pipeline the CLI
         // repoints this node at the NeoForge-combined jar.
         assertResultFromNode(graph, "mcinject", "output", ResultIds.VANILLA_DEOBFUSCATED);
@@ -157,13 +167,11 @@ public class NeoFormGraphTest {
     }
 
     @Test
-    void testMCP_1_15_2_SourceChainAppliesCsvDataBeforeRemap() {
+    void testMCP_1_15_2_RemapsSourcesAfterPatching() {
         var graph = buildGraph("--neoform", "de.oceanlabs.mcp:mcp_config:1.15.2@zip", "--mcp-mappings", "de.oceanlabs.mcp:mcp_stable:60-1.15@zip");
 
-        // The MCP CSV data (javadoc/params) is keyed by SRG names, so it must be applied to the
-        // patched sources while they still use SRG names, before the SRG -> MCP source remap.
-        assertNodeChain(graph, "rename", "decompile", "inject", "patch", "applyMcpCsvData", "remapSourcesToNamed");
-        // Unlike 1.12.2, the class remap is part of the engine-built graph for this version range
+        assertNodeChain(graph, "rename", "decompile", "inject", "patch", "remapSourcesToNamed");
+        assertNotPredecessor(graph, "createMcpMappings", "remapSourcesToNamed");
         assertResultFromNode(graph, "remapClassesToNamed", "output", ResultIds.GAME_JAR_NO_RECOMP);
     }
 
@@ -270,6 +278,17 @@ public class NeoFormGraphTest {
         assertThat(action.getClasspath())
                 .extracting(MavenCoordinate::toString)
                 .containsExactly("net.minecraftforge:mcpcleanup:2.3.2:fatjar");
+    }
+
+    @Test
+    void testMCP_1_12_2_WithForgeAppliesCsvDataAfterUserdevPatches() throws Exception {
+        var graph = buildGraph(
+                "--add-repository", "https://maven.minecraftforge.net",
+                "--neoforge", "net.minecraftforge:forge:1.12.2-14.23.5.2860:userdev3");
+
+        assertNodeChain(graph, "patch", "processForgeSources", "injectLegacyUserdevSources", "applyNeoforgePatches",
+                "transformSources", "remapSourcesToNamed", "recompile");
+        assertResultFromNode(graph, "remapSourcesToNamed", "output", ResultIds.GAME_SOURCES_WITH_NEOFORGE);
     }
 
     private static void assertResultFromNode(ExecutionGraph graph, String nodeId, String outputId, String resultId) {

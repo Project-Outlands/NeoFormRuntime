@@ -555,13 +555,13 @@ public class RunNeoFormCommand extends NeoFormEngineCommand {
             return graph.getResult(ResultIds.GAME_SOURCES);
         } else if (engine.getProcessGeneration().namingScheme() == ProcessGeneration.NamingScheme.MCP) {
             // Legacy MCP sources keep SRG names until after patching; the MCP-named sources are the
-            // output of applyMcpCsvData. When the userdev sources were injected before patching
+            // output of the full MCP source transform. When the userdev sources were injected before patching
             // (deferred to apply its source processor first), they are already part of that output.
-            var srgSourcesOutput = graph.getRequiredOutput(NeoFormEngine.SOURCES_TO_NAMED, "output");
+            var namedSourcesOutput = graph.getRequiredOutput(NeoFormEngine.SOURCES_TO_NAMED, "output");
 
             if (!deferUserdevSources) {
                 var builder = graph.nodeBuilder("sourcesWithNeoForge");
-                builder.input("input", srgSourcesOutput.asInput());
+                builder.input("input", namedSourcesOutput.asInput());
                 var output = builder.output("output", NodeOutputType.ZIP, "Source ZIP containing NeoForge and Minecraft sources");
                 builder.action(new InjectZipContentAction(List.of(
                         new InjectFromZipFileSource(neoforgeSourcesZip, "/")
@@ -569,7 +569,7 @@ public class RunNeoFormCommand extends NeoFormEngineCommand {
                 builder.build();
                 return output;
             }
-            return srgSourcesOutput;
+            return namedSourcesOutput;
         } else {
             var transformedSourceOutput = graph.getRequiredOutput("transformSources", "output");
 
