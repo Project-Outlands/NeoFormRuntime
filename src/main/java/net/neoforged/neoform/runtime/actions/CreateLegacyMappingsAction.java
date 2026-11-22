@@ -1,13 +1,11 @@
 package net.neoforged.neoform.runtime.actions;
 
 import net.neoforged.neoform.runtime.engine.ProcessingEnvironment;
-import net.neoforged.neoform.runtime.graph.ExecutionNodeAction;
 import net.neoforged.srgutils.IMappingFile;
 
 import java.io.IOException;
 import java.nio.charset.StandardCharsets;
 import java.nio.file.Files;
-import java.util.ArrayList;
 import java.util.stream.Collectors;
 import java.util.stream.Stream;
 import java.util.zip.ZipEntry;
@@ -21,7 +19,7 @@ import java.util.zip.ZipOutputStream;
  *  <li>a {@code csvMappings} zip file containing 2 csv files that map SRG names to official names</li>
  * </ul>
  */
-public class CreateLegacyMappingsAction implements ExecutionNodeAction {
+public class CreateLegacyMappingsAction extends BuiltInAction {
     @Override
     public void run(ProcessingEnvironment environment) throws IOException, InterruptedException {
         var first = environment.getRequiredInputPath("officialToObf");
@@ -38,9 +36,11 @@ public class CreateLegacyMappingsAction implements ExecutionNodeAction {
 
         try (var zipCsv = new ZipOutputStream(Files.newOutputStream(environment.getOutputPath("csvMappings")))) {
             writeCsv(zipCsv, "methods.csv", srgToOfficial.getClasses().stream()
-                    .flatMap(c -> c.getMethods().stream()).filter(c -> c.getOriginal().startsWith("m_")));
+                    .flatMap(c -> c.getMethods().stream())
+                    .filter(m -> m.getOriginal().startsWith("m_") || m.getOriginal().startsWith("func_")));
             writeCsv(zipCsv, "fields.csv", srgToOfficial.getClasses().stream()
-                    .flatMap(c -> c.getFields().stream()).filter(c -> c.getOriginal().startsWith("f_")));
+                    .flatMap(c -> c.getFields().stream())
+                    .filter(f -> f.getOriginal().startsWith("f_") || f.getOriginal().startsWith("field_")));
         }
     }
 

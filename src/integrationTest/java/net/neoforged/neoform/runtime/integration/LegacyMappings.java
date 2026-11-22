@@ -4,31 +4,14 @@ import java.util.ArrayList;
 import java.util.List;
 import java.util.Objects;
 
-final class LegacyMappings {
-    private final String officialMappings;
-    private final String intermediaryMappings;
-
-    private LegacyMappings(List<ClassMapping> classes) {
-        var official = new StringBuilder();
-        var intermediary = new StringBuilder();
-        for (var classMapping : classes) {
-            classMapping.appendOfficialTo(official);
-            classMapping.appendIntermediaryTo(intermediary);
-        }
-        officialMappings = official.toString();
-        intermediaryMappings = intermediary.toString();
-    }
+record LegacyMappings(String officialMappings, String intermediaryMappings, boolean embedded) {
 
     static Builder builder() {
         return new Builder();
     }
 
-    String officialMappings() {
-        return officialMappings;
-    }
-
-    String intermediaryMappings() {
-        return intermediaryMappings;
+    static LegacyMappings withJoinedTsrg(String proguard, String joinedTsrg) {
+        return new LegacyMappings(proguard, joinedTsrg, true);
     }
 
     private static final class ClassMapping {
@@ -141,7 +124,13 @@ final class LegacyMappings {
             if (classes.isEmpty()) {
                 throw new IllegalStateException("At least one class mapping must be added");
             }
-            return new LegacyMappings(classes);
+            var official = new StringBuilder();
+            var intermediary = new StringBuilder();
+            for (var classMapping : classes) {
+                classMapping.appendOfficialTo(official);
+                classMapping.appendIntermediaryTo(intermediary);
+            }
+            return new LegacyMappings(official.toString(), intermediary.toString(), false);
         }
     }
 }

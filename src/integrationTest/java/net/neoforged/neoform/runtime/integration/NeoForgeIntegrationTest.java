@@ -7,6 +7,7 @@ import java.lang.reflect.Modifier;
 import java.net.URL;
 import java.net.URLClassLoader;
 import java.nio.file.Path;
+import java.util.List;
 
 import static net.neoforged.neoform.runtime.cli.ResultIds.GAME_JAR;
 import static net.neoforged.neoform.runtime.cli.ResultIds.GAME_JAR_NO_RECOMP_WITH_NEOFORGE;
@@ -16,6 +17,30 @@ import static net.neoforged.neoform.runtime.cli.ResultIds.GAME_SOURCES_WITH_NEOF
 import static org.assertj.core.api.Assertions.assertThat;
 
 class NeoForgeIntegrationTest {
+    @Test
+    void includesLegacyUserdevServicesButNotPrecompiledClasses(@TempDir Path tempDir) throws Exception {
+        var service = "META-INF/services/cpw.mods.modlauncher.api.ILaunchHandlerService";
+        var neoForm = NeoFormFixture.builder()
+                .minecraftVersion("1.16.5").javaVersion(8)
+                .legacyMappings(LegacyMappings.withJoinedTsrg("Game -> a:\n", "a Game\n"))
+                .source("Game.java", "public class Game {\n}\n").compileLauncherSources().build();
+        var fixture = NeoForgeFixture.builder(neoForm)
+                .inject(service, "dev.LaunchProvider\n")
+                .inject("dev/Unwanted.class", "not a class to inject")
+                .patch("Game.java.patch", "--- a/Game.java\n+++ b/Game.java\n@@ -1,2 +1,3 @@\n public class Game {\n+    int patched;\n }\n")
+                .build();
+        var command = NfrtCommand.builder(tempDir, fixture)
+                .result(GAME_SOURCES_WITH_NEOFORGE).result(GAME_JAR_WITH_NEOFORGE).result(GAME_JAR_NO_RECOMP_WITH_NEOFORGE).build();
+
+        command.executeSuccessfully();
+
+        for (var result : List.of(GAME_SOURCES_WITH_NEOFORGE, GAME_JAR_WITH_NEOFORGE, GAME_JAR_NO_RECOMP_WITH_NEOFORGE)) {
+            assertThat(command.resultEntries(result)).contains(service)
+                    .doesNotContain("dev/Unwanted.class", "dev-only/" + service, "config.json");
+            assertThat(command.readResult(result, service)).isEqualTo("dev.LaunchProvider\n");
+        }
+    }
+
     @Test
     void routesTransformedSourcesAndCompiledClassesToNeoForgeResults(@TempDir Path tempDir) throws Exception {
         var neoForm = NeoFormFixture.builder()

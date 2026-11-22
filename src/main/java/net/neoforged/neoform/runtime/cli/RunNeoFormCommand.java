@@ -401,6 +401,15 @@ public class RunNeoFormCommand extends NeoFormEngineCommand {
 
         applyNeoForgeBinaryPatchProcessTransforms(engine, neoforgeZipFile, neoforgeConfig, neoforgeClassesZip, shape);
 
+        var injectFolder = neoforgeConfig.injectFolder();
+        if (shape.injectSourcesBeforeRecompile() && injectFolder != null && !injectFolder.isBlank()) {
+            var userdevFiles = new InjectFromZipFileSource(neoforgeZipFile, injectFolder, Pattern.compile("^(?!.*\\.class$).*"));
+            for (var nodeId : List.of("inject", "binaryWithNeoForge")) {
+                engine.applyTransform(new ModifyAction<>(nodeId, InjectZipContentAction.class, action -> {
+                    action.getInjectedSources().add(userdevFiles);
+                }));
+            }
+        }
     }
 
     static void configureUserdevListLibraries(ExecutionGraph graph, UserdevClasspath userdevClasspath) {
@@ -423,6 +432,13 @@ public class RunNeoFormCommand extends NeoFormEngineCommand {
         var patchBaseJar = neoforgeConfig.notchObf()
                 ? graph.getRequiredOutput("merge", "output")
                 : graph.getResult(ResultIds.VANILLA_DEOBFUSCATED);
+        var applyMcpInjection = neoforgeConfig.notchObf();
+        // Legacy SRG binpatch checksums cover the renamed classes *before* MCInjector changes their bytes.
+        if (patchBaseJar.getNode().id().equals("mcinject")
+                && patchBaseJar.getNode().getRequiredInput("input") instanceof NodeInput.NodeInputForOutput cleanInput) {
+            patchBaseJar = cleanInput.getOutput();
+            applyMcpInjection = true;
+        }
 
         engine.addDataSource("patch", neoforgeZipFile, neoforgeConfig.binaryPatchesFile());
         var binaryPatchOutput = createBinaryPatch(graph, patchBaseJar, neoforgeConfig.binaryPatcherConfig());
@@ -436,6 +452,8 @@ public class RunNeoFormCommand extends NeoFormEngineCommand {
                     binaryPatchOutput,
                     "Patched classes renamed from notch/obfuscated names to SRG"
             );
+        }
+        if (applyMcpInjection) {
             binaryPatchOutput = createExternalJavaToolNode(
                     graph,
                     "binaryPatchMcinject",

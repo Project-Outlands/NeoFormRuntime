@@ -41,6 +41,8 @@ public class ProcessGeneration {
         }
     }
 
+    private static final MinecraftReleaseVersion MC_1_14_4 = new MinecraftReleaseVersion(1, 14, 4);
+    private static final MinecraftReleaseVersion MC_1_16_5 = new MinecraftReleaseVersion(1, 16, 5);
     private static final MinecraftReleaseVersion MC_1_17_1 = new MinecraftReleaseVersion(1, 17, 1);
     private static final MinecraftReleaseVersion MC_1_20_1 = new MinecraftReleaseVersion(1, 20, 1);
     private static final MinecraftReleaseVersion MC_1_21_6 = new MinecraftReleaseVersion(1, 21, 6);
@@ -51,9 +53,9 @@ public class ProcessGeneration {
     public enum NamingScheme {
         /** No intermediary layer: sources/classes already use user-facing names. */
         OFFICIAL,
-        /** SRG intermediary + Mojang ProGuard mappings (1.17-1.20.1). */
+        /** SRG names; prefer official mappings where available. */
         INTERMEDIARY,
-        /** SRG intermediary + MCP CSV mappings (1.12.2 and 1.13-1.16.5). */
+        /** The 1.12.2 pipeline with a default MCP CSV mapping set. */
         MCP
     }
 
@@ -70,6 +72,7 @@ public class ProcessGeneration {
      * remapping step later. (Either to Mojang mappings, or to MCP).
      */
     private NamingScheme namingScheme = NamingScheme.OFFICIAL;
+    private boolean supportsLegacyMojmap;
 
     /**
      * SAS was used in Forge 1.20.1 and earlier to remove the "OnlyIn" annotation from client-only classes
@@ -85,11 +88,6 @@ public class ProcessGeneration {
 
     @Nullable
     private String defaultLegacyMcpMappings;
-
-    /**
-     * For (Neo)Forge 1.20.1 and below, we have to remap method and field names from
-     * SRG to official names for development.
-     */
 
     static ProcessGeneration fromMinecraftVersion(String minecraftVersion) {
         var releaseVersion = MinecraftReleaseVersion.parse(minecraftVersion);
@@ -117,6 +115,8 @@ public class ProcessGeneration {
         if (isLessThanOrEqualTo(releaseVersion, MC_1_20_1)) {
             result.namingScheme = "1.12.2".equals(minecraftVersion) ? NamingScheme.MCP : NamingScheme.INTERMEDIARY;
         }
+        result.supportsLegacyMojmap = isGreaterThanOrEqualTo(releaseVersion, MC_1_14_4)
+                && isLessThanOrEqualTo(releaseVersion, MC_1_16_5);
 
         // In 1.21.6 and later, manifest entries should be generated as they may be used instead of RuntimeDistCleaner
         result.generateDistSourceManifest = isGreaterThanOrEqualTo(releaseVersion, MC_1_21_6);
@@ -146,13 +146,14 @@ public class ProcessGeneration {
 
     /**
      * The naming scheme of the sources/classes produced by MCP/NeoForm for this Minecraft version.
-     * <p>
-     * Note that {@link NamingScheme#MCP} covers two different engine pipelines (1.12.2 and
-     * 1.13-1.16.5); the engine distinguishes them by whether the config contains
-     * {@code mergeMappings}/{@code downloadClientMappings} nodes.
      */
     public NamingScheme namingScheme() {
         return namingScheme;
+    }
+
+    /** Mojang publishes client mappings, but stock MCPConfig does not declare the mapping steps. */
+    boolean supportsLegacyMojmap() {
+        return supportsLegacyMojmap;
     }
 
     /**

@@ -30,6 +30,7 @@ public record NeoForgeConfig(
         List<String> universalFilters,
         @SerializedName("patchesOriginalPrefix") @Nullable String basePathPrefix,
         @SerializedName("patchesModifiedPrefix") @Nullable String modifiedPathPrefix,
+        @SerializedName("inject") @Nullable String injectFolder,
         @SerializedName("processor") @Nullable NeoFormFunction sourceProcessor,
         boolean notchObf,
         Map<String, JsonObject> runs,

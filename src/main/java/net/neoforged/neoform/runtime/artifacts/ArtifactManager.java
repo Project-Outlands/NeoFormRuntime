@@ -100,15 +100,18 @@ public class ArtifactManager {
     }
 
     public Artifact get(MavenCoordinate artifactCoordinate, URI repositoryBaseUrl) throws IOException {
-        if (isDynamicVersion(artifactCoordinate)) {
-            artifactCoordinate = resolveDynamicVersion(artifactCoordinate, List.of(repositoryBaseUrl)).coordinate();
-        }
-
         var externalArtifact = getFromExternalManifest(artifactCoordinate);
         if (externalArtifact != null) {
             return externalArtifact;
         }
 
+        if (isDynamicVersion(artifactCoordinate)) {
+            artifactCoordinate = resolveDynamicVersion(artifactCoordinate, List.of(repositoryBaseUrl)).coordinate();
+        }
+        return downloadFromRepository(artifactCoordinate, repositoryBaseUrl);
+    }
+
+    private Artifact downloadFromRepository(MavenCoordinate artifactCoordinate, URI repositoryBaseUrl) throws IOException {
         var finalLocation = artifactsCache.resolve(artifactCoordinate.toRelativeRepositoryPath());
         var url = artifactCoordinate.toRepositoryUri(repositoryBaseUrl);
         return download(finalLocation, url);
@@ -126,24 +129,24 @@ public class ArtifactManager {
     }
 
     public Artifact get(MavenCoordinate mavenCoordinate) throws IOException {
-        if (isDynamicVersion(mavenCoordinate)) {
-            var resolved = resolveDynamicVersion(mavenCoordinate, repositoryBaseUrls);
-            return get(resolved.coordinate(), resolved.repositoryBaseUrl());
-        }
-
         var externalArtifact = getFromExternalManifest(mavenCoordinate);
         if (externalArtifact != null) {
             return externalArtifact;
+        }
+
+        if (isDynamicVersion(mavenCoordinate)) {
+            var resolved = resolveDynamicVersion(mavenCoordinate, repositoryBaseUrls);
+            return downloadFromRepository(resolved.coordinate(), resolved.repositoryBaseUrl());
         }
 
         var finalLocation = artifactsCache.resolve(mavenCoordinate.toRelativeRepositoryPath());
 
         // Special cases for libraries that are only available via Mojang's library repository.
         if (mavenCoordinate.groupId().equals("com.mojang") && mavenCoordinate.artifactId().equals("logging")) {
-            return get(mavenCoordinate, MINECRAFT_LIBRARIES_URI);
+            return downloadFromRepository(mavenCoordinate, MINECRAFT_LIBRARIES_URI);
         }
         if (mavenCoordinate.groupId().equals("net.minecraft") && mavenCoordinate.artifactId().equals("launchwrapper")) {
-            return get(mavenCoordinate, MINECRAFT_LIBRARIES_URI);
+            return downloadFromRepository(mavenCoordinate, MINECRAFT_LIBRARIES_URI);
         }
 
         return download(finalLocation, () -> {
@@ -242,7 +245,7 @@ public class ArtifactManager {
                 return comparison;
             }
         }
-        return 0;
+        return left.compareTo(right);
     }
 
     private static int compareMavenVersionPart(String left, String right) {
@@ -371,6 +374,18 @@ public class ArtifactManager {
         var artifact = externallyProvided.get(artifactCoordinate);
         if (artifact != null) {
             return artifact;
+        }
+
+        if (isDynamicVersion(artifactCoordinate)) {
+            var prefix = artifactCoordinate.version().substring(0, artifactCoordinate.version().length() - 1);
+            var best = externallyProvided.keySet().stream()
+                    .filter(artifactCoordinate::equalsWithoutVersion)
+                    .map(MavenCoordinate::version)
+                    .filter(v -> v.startsWith(prefix) && !isDynamicVersion(v) && !v.equals("*"))
+                    .max(ArtifactManager::compareMavenVersions);
+            if (best.isPresent()) {
+                return externallyProvided.get(artifactCoordinate.withVersion(best.get()));
+            }
         }
 
         // Fall back to looking up a wildcard version for dependency replacement in includeBuild scenarios

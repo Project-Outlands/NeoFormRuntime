@@ -71,9 +71,11 @@ final class NeoFormFixture implements NfrtFixture {
             Files.writeString(officialMappings, legacyMappings.officialMappings());
             downloads.put("client_mappings", officialMappings);
 
-            var intermediaryMappings = testDirectory.resolve("server-mappings.txt");
-            Files.writeString(intermediaryMappings, legacyMappings.intermediaryMappings());
-            downloads.put("server_mappings", intermediaryMappings);
+            if (!legacyMappings.embedded()) {
+                var intermediaryMappings = testDirectory.resolve("server-mappings.txt");
+                Files.writeString(intermediaryMappings, legacyMappings.intermediaryMappings());
+                downloads.put("server_mappings", intermediaryMappings);
+            }
         }
 
         var launcherDirectory = NfrtFixtureSupport.createLauncherDirectory(
@@ -91,7 +93,7 @@ final class NeoFormFixture implements NfrtFixture {
         steps.add(Map.of("type", "downloadJson"));
         steps.add(Map.of("type", "downloadClient"));
         steps.add(Map.of("type", "strip", "name", "stripClient", "input", "{downloadClientOutput}"));
-        if (legacyMappings != null) {
+        if (legacyMappings != null && !legacyMappings.embedded()) {
             steps.add(Map.of("type", "downloadClientMappings"));
             steps.add(Map.of("type", "downloadServerMappings", "name", "mergeMappings"));
         }
@@ -123,6 +125,9 @@ final class NeoFormFixture implements NfrtFixture {
         data.put("fixtureSources", "sources.zip");
         if (legacyMappings != null) {
             data.put("inject", "inject/");
+            if (legacyMappings.embedded()) {
+                data.put("mappings", "config/joined.tsrg");
+            }
         }
         config.put("data", data);
         config.put("steps", Map.of("joined", steps));
@@ -149,6 +154,9 @@ final class NeoFormFixture implements NfrtFixture {
         entries.put("sources.zip", Files.readAllBytes(sourcesArchive));
         if (legacyMappings != null) {
             entries.put("inject/", new byte[0]);
+            if (legacyMappings.embedded()) {
+                entries.put("config/joined.tsrg", legacyMappings.intermediaryMappings().getBytes(StandardCharsets.UTF_8));
+            }
         }
         NfrtFixtureSupport.writeZip(neoForm, entries);
         return neoForm;

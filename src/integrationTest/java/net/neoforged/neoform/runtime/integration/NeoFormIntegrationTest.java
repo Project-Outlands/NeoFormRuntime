@@ -5,10 +5,14 @@ import org.junit.jupiter.api.io.TempDir;
 import org.junit.jupiter.params.ParameterizedTest;
 import org.junit.jupiter.params.provider.ValueSource;
 
+import java.net.URL;
+import java.net.URLClassLoader;
 import java.nio.file.Files;
 import java.nio.file.Path;
+import java.util.List;
 
 import static net.neoforged.neoform.runtime.cli.ResultIds.CLIENT_RESOURCES;
+import static net.neoforged.neoform.runtime.cli.ResultIds.CSV_MAPPING;
 import static net.neoforged.neoform.runtime.cli.ResultIds.GAME_JAR;
 import static net.neoforged.neoform.runtime.cli.ResultIds.GAME_JAR_NO_RECOMP;
 import static net.neoforged.neoform.runtime.cli.ResultIds.GAME_JAR_WITH_SOURCES;
@@ -17,6 +21,34 @@ import static net.neoforged.neoform.runtime.integration.ClassFileAssertions.asse
 import static org.assertj.core.api.Assertions.assertThat;
 
 class NeoFormIntegrationTest {
+    @ParameterizedTest
+    @ValueSource(strings = {"1.14.4", "1.16.5"})
+    void usesMojmapWithEmbeddedMcpConfigMappings(String version, @TempDir Path tempDir) throws Exception {
+        var fixture = NeoFormFixture.builder()
+                .minecraftVersion(version)
+                .javaVersion(8)
+                .legacyMappings(LegacyMappings.withJoinedTsrg("Example -> a:\n    int count -> b\n    int read() -> c\n",
+                        "a Example\n\tb field_123_a\n\tc ()I func_124_b\n"))
+                .source("Example.java", "public class Example { public int field_123_a; public int func_124_b() { return field_123_a; } }")
+                .compileLauncherSources()
+                .build();
+        var command = NfrtCommand.builder(tempDir, fixture)
+                .result(GAME_SOURCES).result(GAME_JAR).result(GAME_JAR_NO_RECOMP).result(CSV_MAPPING).build();
+
+        command.executeSuccessfully();
+
+        assertThat(command.readResult(GAME_SOURCES, "Example.java")).contains("int count", "int read()", "return count;");
+        assertThat(command.readResult(CSV_MAPPING, "fields.csv")).contains("field_123_a,count,0,");
+        assertThat(command.readResult(CSV_MAPPING, "methods.csv")).contains("func_124_b,read,0,");
+        for (var result : List.of(GAME_JAR, GAME_JAR_NO_RECOMP)) {
+            try (var loader = new URLClassLoader(new URL[]{command.resultPath(result).toUri().toURL()})) {
+                var example = loader.loadClass("Example");
+                assertThat(example.getField("count").getType()).isEqualTo(int.class);
+                assertThat(example.getMethod("read").getReturnType()).isEqualTo(int.class);
+            }
+        }
+    }
+
     @Test
     void writesStandardNeoFormArtifacts(@TempDir Path tempDir) throws Exception {
         var fixture = NeoFormFixture.builder()

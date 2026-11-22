@@ -125,6 +125,11 @@ configurations {
         canBeResolved = true
         transitive = false
     }
+    integrationTestAutoRenamingTool {
+        canBeConsumed = false
+        canBeResolved = true
+        transitive = false
+    }
     integrationTestImplementation.extendsFrom(testImplementation)
     integrationTestRuntimeOnly.extendsFrom(testRuntimeOnly)
 }
@@ -157,6 +162,7 @@ dependencies {
     integrationTestDiffPatch toolVersions.getProperty("DIFF_PATCH")
     integrationTestInstallerTools toolVersions.getProperty("INSTALLER_TOOLS")
     integrationTestSideAnnotationStripper toolVersions.getProperty("MCF_SIDE_ANNOTATION_STRIPPER")
+    integrationTestAutoRenamingTool toolVersions.getProperty("AUTO_RENAMING_TOOL")
 }
 
 // Add dependencies to external tools
@@ -191,12 +197,14 @@ final integrationTest = tasks.register("integrationTest", Test) {
             configurations.integrationTestJavaSourceTransformer,
             configurations.integrationTestDiffPatch,
             configurations.integrationTestInstallerTools,
-            configurations.integrationTestSideAnnotationStripper
+            configurations.integrationTestSideAnnotationStripper,
+            configurations.integrationTestAutoRenamingTool
     )
     inputs.property("javaSourceTransformerCoordinate", toolVersions.getProperty("JAVA_SOURCE_TRANSFORMER"))
     inputs.property("diffPatchCoordinate", toolVersions.getProperty("DIFF_PATCH"))
     inputs.property("installerToolsCoordinate", toolVersions.getProperty("INSTALLER_TOOLS"))
     inputs.property("sideAnnotationStripperCoordinate", toolVersions.getProperty("MCF_SIDE_ANNOTATION_STRIPPER"))
+    inputs.property("autoRenamingToolCoordinate", toolVersions.getProperty("AUTO_RENAMING_TOOL"))
     doFirst {
         systemProperty "nfrt.test.executable-jar", shadowJar.archiveFile.get().asFile.absolutePath
         systemProperty "nfrt.test.java-source-transformer-coordinate", toolVersions.getProperty("JAVA_SOURCE_TRANSFORMER")
@@ -207,6 +215,8 @@ final integrationTest = tasks.register("integrationTest", Test) {
         systemProperty "nfrt.test.installer-tools-jar", configurations.integrationTestInstallerTools.singleFile.absolutePath
         systemProperty "nfrt.test.side-annotation-stripper-coordinate", toolVersions.getProperty("MCF_SIDE_ANNOTATION_STRIPPER")
         systemProperty "nfrt.test.side-annotation-stripper-jar", configurations.integrationTestSideAnnotationStripper.singleFile.absolutePath
+        systemProperty "nfrt.test.auto-renaming-tool-coordinate", toolVersions.getProperty("AUTO_RENAMING_TOOL")
+        systemProperty "nfrt.test.auto-renaming-tool-jar", configurations.integrationTestAutoRenamingTool.singleFile.absolutePath
     }
 }
 tasks.named("check") {

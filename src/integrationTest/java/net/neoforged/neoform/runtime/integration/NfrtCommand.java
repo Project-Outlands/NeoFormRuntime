@@ -287,6 +287,7 @@ final class NfrtCommand {
             addTool(artifacts, "diff-patch");
             addTool(artifacts, "installer-tools");
             addTool(artifacts, "side-annotation-stripper");
+            addTool(artifacts, "auto-renaming-tool");
             additionalArtifacts.forEach((coordinate, artifact) ->
                     artifacts.setProperty(coordinate, artifact.toAbsolutePath().toString())
             );

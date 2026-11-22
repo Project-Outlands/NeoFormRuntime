@@ -17,6 +17,7 @@ final class NeoForgeFixture implements NfrtFixture {
     private final NeoFormFixture neoForm;
     private final Map<String, String> sources;
     private final Map<String, byte[]> universalEntries;
+    private final Map<String, byte[]> injectedEntries;
     private final List<String> libraries;
     private final Map<String, String> accessTransformers;
     private final byte[] binaryPatch;
@@ -28,6 +29,7 @@ final class NeoForgeFixture implements NfrtFixture {
     private NeoForgeFixture(NeoFormFixture neoForm,
                             Map<String, String> sources,
                             Map<String, byte[]> universalEntries,
+                            Map<String, byte[]> injectedEntries,
                             List<String> libraries,
                             Map<String, String> accessTransformers,
                             byte[] binaryPatch,
@@ -38,6 +40,7 @@ final class NeoForgeFixture implements NfrtFixture {
         this.neoForm = neoForm;
         this.sources = Map.copyOf(sources);
         this.universalEntries = Map.copyOf(universalEntries);
+        this.injectedEntries = Map.copyOf(injectedEntries);
         this.libraries = List.copyOf(libraries);
         this.accessTransformers = Map.copyOf(accessTransformers);
         this.binaryPatch = binaryPatch.clone();
@@ -90,6 +93,10 @@ final class NeoForgeFixture implements NfrtFixture {
 
         var userdev = testDirectory.resolve("neoforge-userdev.jar");
         var entries = new LinkedHashMap<String, byte[]>();
+        if (!injectedEntries.isEmpty()) {
+            config.put("inject", "dev-only/");
+            injectedEntries.forEach((name, content) -> entries.put("dev-only/" + name, content));
+        }
         entries.put("config.json", NfrtFixtureSupport.jsonBytes(config));
         entries.put("ats/", new byte[0]);
         if (accessTransformers.isEmpty()) {
@@ -114,6 +121,7 @@ final class NeoForgeFixture implements NfrtFixture {
         private final NeoFormFixture neoForm;
         private final Map<String, String> sources = new LinkedHashMap<>();
         private final Map<String, byte[]> universalEntries = new LinkedHashMap<>();
+        private final Map<String, byte[]> injectedEntries = new LinkedHashMap<>();
         private final List<String> libraries = new ArrayList<>();
         private final Map<String, String> accessTransformers = new LinkedHashMap<>();
         private byte[] binaryPatch = new byte[0];
@@ -137,6 +145,11 @@ final class NeoForgeFixture implements NfrtFixture {
 
         Builder universalEntry(String path, byte[] content) {
             universalEntries.put(path, content.clone());
+            return this;
+        }
+
+        Builder inject(String path, String content) {
+            injectedEntries.put(path, content.getBytes(StandardCharsets.UTF_8));
             return this;
         }
 
@@ -178,6 +191,7 @@ final class NeoForgeFixture implements NfrtFixture {
                     neoForm,
                     sources,
                     universalEntries,
+                    injectedEntries,
                     libraries,
                     accessTransformers,
                     binaryPatch,

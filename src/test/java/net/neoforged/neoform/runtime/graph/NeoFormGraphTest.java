@@ -171,8 +171,19 @@ public class NeoFormGraphTest {
         var graph = buildGraph("--neoform", "de.oceanlabs.mcp:mcp_config:1.15.2@zip", "--mcp-mappings", "de.oceanlabs.mcp:mcp_stable:60-1.15@zip");
 
         assertNodeChain(graph, "rename", "decompile", "inject", "patch", "remapSourcesToNamed");
+        assertResultFromNode(graph, "createMcpMappings", "csvMappings", ResultIds.CSV_MAPPING);
         assertNotPredecessor(graph, "createMcpMappings", "remapSourcesToNamed");
         assertResultFromNode(graph, "remapClassesToNamed", "output", ResultIds.GAME_JAR_NO_RECOMP);
+    }
+
+    @Test
+    void forgeSrgBinpatchesApplyBeforeMcpInjection() {
+        var graph = buildGraph("--add-repository", "https://maven.minecraftforge.net/releases/",
+                "--neoforge", "net.minecraftforge:forge:1.16.5-36.2.39:userdev");
+
+        assertNotPredecessor(graph, "mcinject", "binaryPatch");
+        assertNodeChain(graph, "rename", "binaryPatch", "copyUnpatchedClasses", "binaryPatchMcinject", "applyDevTransforms");
+        assertResultFromNode(graph, "mcinject", "output", ResultIds.VANILLA_DEOBFUSCATED);
     }
 
     @Test

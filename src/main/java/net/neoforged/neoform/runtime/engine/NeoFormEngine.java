@@ -7,6 +7,7 @@ import net.neoforged.neoform.runtime.actions.DownloadFromVersionManifestAction;
 import net.neoforged.neoform.runtime.actions.DownloadLauncherManifestAction;
 import net.neoforged.neoform.runtime.actions.DownloadVersionManifestAction;
 import net.neoforged.neoform.runtime.actions.ExternalJavaToolAction;
+import net.neoforged.neoform.runtime.actions.ExtractNeoFormDataAction;
 import net.neoforged.neoform.runtime.actions.InjectFromZipFileSource;
 import net.neoforged.neoform.runtime.actions.InjectZipContentAction;
 import net.neoforged.neoform.runtime.actions.MergeWithSourcesAction;
@@ -236,18 +237,37 @@ public class NeoFormEngine implements AutoCloseable {
         // If we're running NeoForm for 1.20.1 or earlier, the sources after patches use
         // SRG method and field names, and need to be remapped.
         var namingScheme = processGeneration.namingScheme();
-        if (namingScheme == ProcessGeneration.NamingScheme.INTERMEDIARY) {
-            if (graph.hasOutput("mergeMappings", "output")
-                    && graph.hasOutput("downloadClientMappings", "output")) {
-                addOfficialIntermediaryRemap(decompileInput);
-            } else {
-                addMcpRemap(decompileInput);
-            }
-        } else if (namingScheme == ProcessGeneration.NamingScheme.MCP) {
-            addMcpRemap(decompileInput);
-        } else {
+        if (namingScheme == ProcessGeneration.NamingScheme.OFFICIAL) {
             // Without the presence of further patching or renaming, the game jar without recompilation is the deobfuscated vanilla jar
             graph.setResultFromCurrentInput(ResultIds.GAME_JAR_NO_RECOMP, decompileInput);
+            return;
+        }
+        if (namingScheme == ProcessGeneration.NamingScheme.MCP
+                || (processGeneration.supportsLegacyMojmap() && legacyMcpMappingsPath != null)) {
+            addMcpRemap(decompileInput);
+            return;
+        }
+        if (processGeneration.supportsLegacyMojmap()) {
+            addMissingLegacyMojmapSteps();
+        }
+        if (graph.hasOutput("mergeMappings", "output") && graph.hasOutput("downloadClientMappings", "output")) {
+            addOfficialIntermediaryRemap(decompileInput);
+        } else {
+            addMcpRemap(decompileInput);
+        }
+    }
+
+    private void addMissingLegacyMojmapSteps() {
+        if (!graph.hasOutput("downloadClientMappings", "output")) {
+            var download = graph.nodeBuilder("downloadClientMappings");
+            createDownloadFromVersionManifest(download, "client_mappings", NodeOutputType.TXT, "Official mappings for the Minecraft client jar-file.");
+            download.build();
+        }
+        if (!graph.hasOutput("mergeMappings", "output")) {
+            var merge = graph.nodeBuilder("mergeMappings");
+            merge.output("output", NodeOutputType.TSRG, "Obfuscated to SRG mappings from MCPConfig.");
+            merge.action(new ExtractNeoFormDataAction(getRequiredDataSource("mappings").id()));
+            merge.build();
         }
     }
 
