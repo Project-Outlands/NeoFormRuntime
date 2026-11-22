@@ -3,8 +3,11 @@ package net.neoforged.neoform.runtime.cli;
 import com.google.gson.Gson;
 import net.neoforged.neoform.runtime.cache.CacheKey;
 import net.neoforged.neoform.runtime.engine.NeoFormEngine;
+import net.neoforged.neoform.runtime.utils.MavenCoordinate;
 import org.junit.jupiter.api.Test;
 import org.junit.jupiter.api.io.TempDir;
+import org.junit.jupiter.params.ParameterizedTest;
+import org.junit.jupiter.params.provider.ValueSource;
 import picocli.CommandLine;
 
 import java.io.IOException;
@@ -120,26 +123,26 @@ class RunNeoFormCommandCacheKeyTest {
         assertOnlyActionCacheKeysChange(engineA, engineB);
     }
 
-    @Test
-    void cleanroomListLibrariesPolicyIsAppliedBeforeExecutionAndIncludedInCacheKey(@TempDir Path tempDir) throws Exception {
+    @ParameterizedTest
+    @ValueSource(strings = {"com.cleanroommc:cleanroom:0.6.13-alpha:universal@jar", "top.outlands:outlands:2026.11.21-97@jar"})
+    void listLibrariesPolicyIsAppliedBeforeExecutionAndIncludedInCacheKey(String universalArtifact, @TempDir Path tempDir) throws Exception {
         var neoform = tempDir.resolve("neoform.zip");
         var parchment = tempDir.resolve("parchment.zip");
-        var sources = tempDir.resolve("cleanroom-sources.jar");
-        var userdev = tempDir.resolve("cleanroom-userdev.jar");
+        var sources = tempDir.resolve("sources.jar");
+        var userdev = tempDir.resolve("userdev.jar");
         var repository = tempDir.resolve("repository");
-        var universal = repository.resolve(
-                "com/cleanroommc/cleanroom/0.5.17-alpha/cleanroom-0.5.17-alpha-universal.jar");
+        var universal = repository.resolve(MavenCoordinate.parse(universalArtifact).toRelativeRepositoryPath());
 
         writeNeoFormWithIntermediarySources(neoform, "source-patch");
         writeZip(parchment, Map.of("parchment.json", "{}"));
-        writeZip(sources, Map.of("com/cleanroommc/test/Example.java", "package com.cleanroommc.test;\nclass Example {}\n"));
+        writeZip(sources, Map.of("example/Example.java", "package example;\nclass Example {}\n"));
         Files.createDirectories(universal.getParent());
-        writeZip(universal, Map.of("com/cleanroommc/test/Example.class", "compiled"));
+        writeZip(universal, Map.of("example/Example.class", "compiled"));
         writeNeoForgeUserdev(
                 userdev,
                 neoform,
                 sources,
-                "com.cleanroommc:cleanroom:0.5.17-alpha:universal",
+                universalArtifact,
                 List.of(
                         "io.netty:netty-common:4.2.15.Final",
                         "com.cleanroommc:lwjglxx:1.1.21",

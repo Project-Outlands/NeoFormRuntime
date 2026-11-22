@@ -25,7 +25,7 @@ import net.neoforged.neoform.runtime.cache.CacheManager;
 import net.neoforged.neoform.runtime.cli.FileHashService;
 import net.neoforged.neoform.runtime.cli.LockManager;
 import net.neoforged.neoform.runtime.cli.ResultIds;
-import net.neoforged.neoform.runtime.compatibility.LegacyMcpToolOverrides;
+import net.neoforged.neoform.runtime.compatibility.ToolOverrides;
 import net.neoforged.neoform.runtime.config.neoform.NeoFormConfig;
 import net.neoforged.neoform.runtime.config.neoform.NeoFormDistConfig;
 import net.neoforged.neoform.runtime.config.neoform.NeoFormFunction;
@@ -86,6 +86,7 @@ public class NeoFormEngine implements AutoCloseable {
     private final BuildOptions buildOptions = new BuildOptions();
     private boolean verbose;
     private ProcessGeneration processGeneration;
+    private int javaVersion;
 
     /**
      * Nodes can reference certain configuration data (access transformers, patches, etc.) which come
@@ -191,6 +192,7 @@ public class NeoFormEngine implements AutoCloseable {
 
     public void loadNeoFormProcess(NeoFormDistConfig distConfig) throws IOException {
         processGeneration = ProcessGeneration.fromMinecraftVersion(distConfig.minecraftVersion());
+        javaVersion = distConfig.javaVersion();
 
         if (legacyMcpMappingsPath == null && processGeneration.defaultLegacyMcpMappings() != null) {
             legacyMcpMappingsPath = artifactManager.get(processGeneration.defaultLegacyMcpMappings()).path();
@@ -599,7 +601,7 @@ public class NeoFormEngine implements AutoCloseable {
         return Optional.ofNullable(declaredMagicOutput[0]);
     }
 
-    private static List<MavenCoordinate> getFunctionClasspath(String functionId, NeoFormFunction function) {
+    private List<MavenCoordinate> getFunctionClasspath(String functionId, NeoFormFunction function) {
         List<String> toolClasspath = new ArrayList<>();
         if (function.toolArtifact() != null) {
             if (function.classpath() != null || function.mainClass() != null) {
@@ -625,8 +627,8 @@ public class NeoFormEngine implements AutoCloseable {
         return toolClasspathCoordinates;
     }
 
-    private static MavenCoordinate overrideToolArtifact(String functionId, MavenCoordinate toolArtifact) {
-        var override = LegacyMcpToolOverrides.getToolOverride(functionId, toolArtifact);
+    private MavenCoordinate overrideToolArtifact(String functionId, MavenCoordinate toolArtifact) {
+        var override = ToolOverrides.getToolOverride(javaVersion, functionId, toolArtifact);
         if (override != null) {
             LOG.println("Overriding " + functionId + " tool " + toolArtifact + " with " + override);
             return override;

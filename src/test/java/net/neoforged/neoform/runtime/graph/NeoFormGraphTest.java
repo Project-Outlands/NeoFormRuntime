@@ -249,18 +249,24 @@ public class NeoFormGraphTest {
     }
 
     @Test
-    void testCleanroom_BinaryPatchRenameUsesOverriddenSpecialSource() throws Exception {
+    void testCleanroom_OverridesRenameAndMcinjectInBothPipelines() {
         var graph = buildGraph(
                 "--add-repository", "https://repo.cleanroommc.com/releases",
                 "--add-repository", "https://repo.cleanroommc.com/snapshots",
                 "--add-repository", "https://maven.arcseekers.com/releases",
                 "--neoforge", "com.cleanroommc:cleanroom:0.6.13-alpha:userdev");
 
-        // Cleanroom's mcp_config references SpecialSource 1.11.3, which cannot read modern class files
-        var action = (ExternalJavaToolAction) graph.getRequiredNode("binaryPatchRename").action();
-        assertThat(action.getClasspath())
-                .extracting(MavenCoordinate::toString)
-                .containsExactly("net.md-5:SpecialSource:1.11.6:shaded");
+        assertToolClasspath(graph, "net.md-5:SpecialSource:1.11.6:shaded", "rename", "binaryPatchRename");
+        assertToolClasspath(graph, "de.oceanlabs.mcp:mcinjector:3.8.12:fatjar", "mcinject", "binaryPatchMcinject");
+    }
+
+    @Test
+    void testStandaloneJava25McpConfig_OverridesBothTools() {
+        var graph = buildGraph("--add-repository", "https://repo.cleanroommc.com/releases",
+                "--neoform", "de.oceanlabs.mcp:mcp_config:1.12.2-20260220.202731@zip");
+
+        assertToolClasspath(graph, "net.md-5:SpecialSource:1.11.6:shaded", "rename");
+        assertToolClasspath(graph, "de.oceanlabs.mcp:mcinjector:3.8.12:fatjar", "mcinject");
     }
 
     @Test
@@ -289,6 +295,13 @@ public class NeoFormGraphTest {
         assertNodeChain(graph, "patch", "processForgeSources", "injectLegacyUserdevSources", "applyNeoforgePatches",
                 "transformSources", "remapSourcesToNamed", "recompile");
         assertResultFromNode(graph, "remapSourcesToNamed", "output", ResultIds.GAME_SOURCES_WITH_NEOFORGE);
+    }
+
+    private static void assertToolClasspath(ExecutionGraph graph, String coordinate, String... nodeIds) {
+        for (var nodeId : nodeIds) {
+            var action = (ExternalJavaToolAction) graph.getRequiredNode(nodeId).action();
+            assertThat(action.getClasspath()).as(nodeId).containsExactly(MavenCoordinate.parse(coordinate));
+        }
     }
 
     private static void assertResultFromNode(ExecutionGraph graph, String nodeId, String outputId, String resultId) {
